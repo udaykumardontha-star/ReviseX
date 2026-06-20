@@ -167,13 +167,14 @@ export function TopNav() {
           </svg>
           GitHub
         </a>
-        <div style={{
-          width: 34, height: 34, borderRadius: "50%",
-          background: "linear-gradient(135deg, #34C759, #1a8c38)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "white", fontWeight: 800, fontSize: 14, flexShrink: 0,
-          boxShadow: "0 2px 8px rgba(52,199,89,0.4)"
-        }}>R</div>
+        <img
+          src="/icon-192.png"
+          alt="Profile"
+          style={{
+            width: 34, height: 34, borderRadius: "50%",
+            boxShadow: "0 2px 8px rgba(52,199,89,0.4)", objectFit: "cover"
+          }}
+        />
       </div>
     </>
   );

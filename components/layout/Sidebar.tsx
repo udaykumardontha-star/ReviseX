@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏠", group: "Overview" },
-  { href: "/revision", label: "Revision Hub", icon: "📖", group: "Overview" },
   { href: "/import", label: "Import", icon: "📥", group: "Library" },
   { href: "/topics", label: "Topics", icon: "🗂️", group: "Library" },
   { href: "/questions", label: "Questions", icon: "❓", group: "Library" },
@@ -29,7 +28,7 @@ export function Sidebar() {
   return (
     <aside className="app-sidebar">
       <div className="sidebar-logo">
-        <div className="sidebar-logo-mark">R</div>
+        <img src="/icon-192.png" alt="ReviseX" style={{ width: 32, height: 32, borderRadius: 6 }} />
         <span className="sidebar-logo-text">ReviseX</span>
       </div>
 
