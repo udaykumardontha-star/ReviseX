@@ -29,8 +29,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS questions_fts USING fts5(
     short_explanation,
     category         UNINDEXED,
     topic_name       UNINDEXED,
-    content          = 'questions',
-    content_rowid    = 'id',
     tokenize         = "porter unicode61 remove_diacritics 2"
 );
 
@@ -43,8 +41,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS topics_fts USING fts5(
     slug,
     name,
     category,
-    content       = 'topics',
-    content_rowid = 'id',
     tokenize      = "porter unicode61 remove_diacritics 2"
 );
 
@@ -56,8 +52,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS topics_fts USING fts5(
 -- -----------------------------------------------------------------------------
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
     content,
-    content       = 'notes',
-    content_rowid = 'id',
     tokenize      = "porter unicode61 remove_diacritics 2"
 );
 

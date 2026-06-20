@@ -56,10 +56,10 @@ export type FtsRebuildResult = {
 function buildFtsQuery(userInput: string): string {
   return userInput
     .trim()
-    .replace(/["'*^()[\]{}<>]/g, " ")  // strip FTS5 special chars
+    .replace(/[^a-zA-Z0-9\s]/g, " ")  // strictly strip non-alphanumeric chars
     .split(/\s+/)
     .filter((t) => t.length >= 2)
-    .map((t) => `"${t}"*`)
+    .map((t) => `${t}*`)
     .join(" ");
 }
 
@@ -222,10 +222,10 @@ export const searchIndexService = {
       await rawSqlite.execute("BEGIN;");
       await rawSqlite.execute("DELETE FROM questions_fts;");
       await rawSqlite.execute(`
-        INSERT INTO questions_fts(rowid, question_text, topic_name, category, difficulty)
-          SELECT q.id, q.question, t.name, q.category, q.difficulty
+        INSERT INTO questions_fts(rowid, question, option_a, option_b, option_c, option_d, short_explanation, category, topic_name)
+          SELECT q.id, q.question, q.option_a, q.option_b, q.option_c, q.option_d, COALESCE(q.short_explanation, ''), q.category, COALESCE(t.name, '')
           FROM questions q
-          JOIN topics t ON t.id = q.topic_id
+          LEFT JOIN topics t ON t.id = q.topic_id
           WHERE q.is_deleted = 0;
       `);
       await rawSqlite.execute("COMMIT;");
@@ -249,8 +249,8 @@ export const searchIndexService = {
       await rawSqlite.execute("BEGIN;");
       await rawSqlite.execute("DELETE FROM topics_fts;");
       await rawSqlite.execute(`
-        INSERT INTO topics_fts(rowid, name, category)
-          SELECT id, name, category FROM topics WHERE is_deleted = 0;
+        INSERT INTO topics_fts(rowid, slug, name, category)
+          SELECT id, slug, name, category FROM topics WHERE is_deleted = 0;
       `);
       await rawSqlite.execute("COMMIT;");
 

@@ -49,16 +49,6 @@ export function Sidebar() {
           })}
         </div>
       </nav>
-
-      <div className="sidebar-footer">
-        <div className="streak-widget">
-          <div className="streak-flame">🔥</div>
-          <div>
-            <div className="streak-count">{streak}</div>
-            <div className="streak-label">Day streak</div>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 }
