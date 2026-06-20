@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { noteService } from "@/services";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 /** GET — return cached note if it exists */
 export async function GET(

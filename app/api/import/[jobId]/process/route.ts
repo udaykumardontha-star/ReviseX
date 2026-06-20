@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { importService } from "@/services";
 
 export const runtime = "nodejs";
-export const maxDuration = 300; // 5 min — Gemini vision + PDF calls can take time
+export const maxDuration = 60; // Max allowed on Vercel Hobby
 
 export async function POST(
   req: NextRequest,

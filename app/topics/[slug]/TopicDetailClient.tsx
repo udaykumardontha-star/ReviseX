@@ -19,13 +19,13 @@ type NoteData = {
   keywords: string[]; facts: string[]; wasFromCache: boolean;
 };
 
-type Props = { slug: string; initialTopic: Topic | null };
+type Props = { slug: string; initialTopic: Topic | null; initialNote?: NoteData | null };
 
-export function TopicDetailClient({ slug, initialTopic }: Props) {
+export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
   const [topic] = useState<Topic | null>(initialTopic);
   const [activeTab, setActiveTab] = useState<"note" | "questions" | "facts">("note");
-  const [noteData, setNoteData] = useState<NoteData | null>(null);
-  const [noteLoading, setNoteLoading] = useState(false);
+  const [noteData, setNoteData] = useState<NoteData | null>(initialNote ?? null);
+  const [noteLoading, setNoteLoading] = useState(!initialNote);
   const [noteError, setNoteError] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [qLoading, setQLoading] = useState(false);
@@ -36,8 +36,9 @@ export function TopicDetailClient({ slug, initialTopic }: Props) {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
-  // Auto-load note on mount
+  // Auto-load note on mount if not provided by server
   useEffect(() => {
+    if (initialNote) return;
     const loadNote = async () => {
       setNoteLoading(true);
       setNoteError("");
@@ -52,13 +53,13 @@ export function TopicDetailClient({ slug, initialTopic }: Props) {
           setNoteData(d);
         }
       } catch {
-        setNoteError("Network error loading note.");
+        setNoteError("Network error or timeout loading note.");
       } finally {
         setNoteLoading(false);
       }
     };
     void loadNote();
-  }, [slug]);
+  }, [slug, initialNote]);
 
   // Load questions when that tab is active
   useEffect(() => {

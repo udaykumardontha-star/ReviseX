@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { TopicDetailClient } from "./TopicDetailClient";
-import { topicService } from "@/services";
+import { topicService, noteService } from "@/services";
 import { notFound } from "next/navigation";
 
 export async function generateMetadata({
@@ -30,5 +30,19 @@ export default async function TopicDetailPage({
   }
 
   const topic = result.success ? result.data : null;
-  return <TopicDetailClient slug={slug} initialTopic={topic} />;
+
+  let initialNote = null;
+  if (topic && topic.topicStatus === "generated") {
+    const noteResult = await noteService.getNoteByTopicSlug(slug);
+    if (noteResult.success) {
+      initialNote = {
+        note: noteResult.data,
+        keywords: noteResult.data.keywordList,
+        facts: noteResult.data.factList,
+        wasFromCache: true,
+      };
+    }
+  }
+
+  return <TopicDetailClient slug={slug} initialTopic={topic} initialNote={initialNote} />;
 }

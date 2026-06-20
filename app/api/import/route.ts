@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const jobs = importService.listJobs();
-  const stats = importService.getJobStats();
+  const jobs = await importService.listJobs();
+  const stats = await importService.getJobStats();
   return NextResponse.json({ jobs, stats });
 }
