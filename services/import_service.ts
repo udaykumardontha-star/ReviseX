@@ -489,6 +489,7 @@ async function stageQuestionsFromAiResponse(
     difficulty: q.difficulty,
     topic: q.topic,
     category: q.category,
+    examName: q.examName ?? null,
   }));
 
   const inserted = await stagedQuestionRepository.createMany(stageInputs);

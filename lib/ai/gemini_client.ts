@@ -75,7 +75,8 @@ Output format:
       "short_explanation": "Concise SSC-style explanation of why this answer is correct. One or two sentences max.",
       "difficulty": "medium",
       "topic": "Specific topic name",
-      "category": "Predefined category name"
+      "category": "Predefined category name",
+      "exam_name": "ONLY extract the exam name if it is explicitly mentioned in the text (e.g. 'SSC CGL 2023 Tier 1'). Do NOT guess or hallucinate. If not explicitly mentioned, omit this field or set to null."
     }
   ]
 }`;

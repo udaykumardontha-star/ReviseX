@@ -37,7 +37,7 @@ export const VALID_CATEGORIES = [
 export type ValidCategory = (typeof VALID_CATEGORIES)[number];
 
 export const VALID_DIFFICULTIES = ["easy", "medium", "hard"] as const;
-export type ValidDifficulty = (typeof VALID_DIFFICULTIES)[number];
+export type ValidDifficulty = "easy" | "medium" | "hard";
 
 export const TOPIC_STATUSES = [
   "not_generated",
@@ -238,6 +238,7 @@ export const stagedQuestions = sqliteTable(
       .default("medium"),
     topic: text("topic").notNull(),
     category: text("category").notNull(),
+    examName: text("exam_name"),
     status: text("status", { enum: ["pending", "approved", "rejected"] })
       .notNull()
       .default("pending"),
@@ -274,10 +275,9 @@ export const questions = sqliteTable(
     sourceId: integer("source_id")
       .notNull()
       .references(() => sources.id, { onDelete: "restrict" }),
-    category: text("category").notNull(),
-    difficulty: text("difficulty", { enum: ["easy", "medium", "hard"] })
-      .notNull()
-      .default("medium"),
+    category: text("category").$type<ValidCategory>().notNull().default("Miscellaneous"),
+    examName: text("exam_name"),
+    difficulty: text("difficulty").$type<"easy" | "medium" | "hard">().notNull().default("medium"),
     question: text("question").notNull(),
     optionA: text("option_a").notNull(),
     optionB: text("option_b").notNull(),

@@ -171,6 +171,23 @@ export const revisionService = {
   },
 
   /**
+   * Returns up to 40 random facts for the Daily Facts page.
+   */
+  async getDailyFacts(): Promise<Result<Array<{ fact: string; topicName: string; topicSlug: string }>>> {
+    try {
+      const randomFactsRaw = await noteRepository.getRandomFacts(40);
+      const randomFacts = randomFactsRaw.map((f) => ({
+        fact: f.fact,
+        topicName: f.topicName,
+        topicSlug: f.topicSlug,
+      }));
+      return ok(randomFacts);
+    } catch (e) {
+      return err(`Failed to load facts: ${e instanceof Error ? e.message : String(e)}`, e, "DATABASE_ERROR");
+    }
+  },
+
+  /**
    * Returns streak stats only (lightweight — for the nav streak badge).
    */
   async getStreak(): Promise<DailyStreak> {

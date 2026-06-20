@@ -7,6 +7,7 @@ type Question = {
   optionA: string; optionB: string; optionC: string; optionD: string;
   correctOption: string; shortExplanation: string | null;
   topicName?: string; topicSlug?: string;
+  examName?: string | null;
   isBookmarked?: boolean; timesRevised: number; timesViewed: number;
 };
 type ListData = { items: Question[]; total: number; page: number; pageSize: number };
@@ -143,6 +144,7 @@ export function QuestionsPageClient() {
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                     <span className={`badge ${DIFF_COLOR[q.difficulty] ?? "badge-gray"}`}>{q.difficulty}</span>
                     <span className={`badge ${CATEGORY_COLORS[q.category] ?? "badge-gray"}`}>{q.category}</span>
+                    {q.examName && <span className="badge badge-purple" style={{ fontWeight: 600 }}>🏛️ {q.examName}</span>}
                     <button
                       className="btn btn-ghost btn-icon"
                       title={isBookmarked ? "Remove bookmark" : "Bookmark"}

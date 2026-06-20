@@ -202,7 +202,7 @@ function SearchContent() {
   );
 }
 
-export function SearchPageClient() {
+export function HomeClient() {
   return (
     <Suspense fallback={<div style={{ padding: 32, textAlign: "center" }}>Loading search…</div>}>
       <SearchContent />

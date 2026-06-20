@@ -32,6 +32,71 @@ type ImportMode = "file" | "text";
 const ACCEPTED_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp", "image/jpg"];
 const ACCEPTED_EXT   = ".pdf,.png,.jpg,.jpeg,.webp";
 
+// Dynamically load PDF.js from CDN
+async function extractTextFromPDF(file: File): Promise<string> {
+  // @ts-ignore
+  if (!window.pdfjsLib) {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    document.head.appendChild(script);
+    await new Promise((resolve) => {
+      script.onload = resolve;
+    });
+    // @ts-ignore
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  // @ts-ignore
+  const pdfjsLib = window.pdfjsLib;
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  
+  let fullText = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map((item: any) => item.str).join(" ");
+    fullText += pageText + "\n\n";
+  }
+  
+  return fullText.trim();
+}
+
+async function resizeImageIfNeeded(file: File, maxMb: number = 4): Promise<File> {
+  if (file.size <= maxMb * 1024 * 1024) return file; // no resize needed
+
+  return new Promise((resolve) => {
+    const img = document.createElement("img");
+    img.src = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      const canvas = document.createElement("canvas");
+      let { width, height } = img;
+      
+      // Simple scaling to ~1920x1080 max bounds
+      const MAX_WIDTH = 1920;
+      const MAX_HEIGHT = 1080;
+      if (width > height) {
+        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+      } else {
+        if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      // Compress to JPEG 80%
+      canvas.toBlob((blob) => {
+        if (!blob) resolve(file); // fallback
+        else resolve(new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: "image/jpeg" }));
+      }, "image/jpeg", 0.8);
+    };
+    img.onerror = () => resolve(file); // fallback on error
+  });
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ImportPageClient() {
@@ -158,21 +223,35 @@ export function ImportPageClient() {
     try {
       // ── STAGE 1: Create import job ──────────────────────────────────
       let startRes: Response;
+      let finalMode = mode;
+      let finalFile = file;
+      let extractedPdfText = "";
 
-      if (mode === "text") {
+      // Bypass Vercel 4.5MB limit by extracting PDF text locally
+      if (mode === "file" && file?.type === "application/pdf") {
+        setUploading(true);
+        // Show user we are doing local parsing
+        extractedPdfText = await extractTextFromPDF(file);
+        finalMode = "text";
+      } else if (mode === "file" && file?.type.startsWith("image/")) {
+        setUploading(true);
+        finalFile = await resizeImageIfNeeded(file);
+      }
+
+      if (finalMode === "text") {
         startRes = await fetch("/api/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            textContent: textContent.trim(),
-            sourceName: sourceName || "Manual Paste",
-            fileName: `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
+            textContent: extractedPdfText || textContent.trim(),
+            sourceName: sourceName || (file ? file.name : "Manual Paste"),
+            fileName: file ? file.name : `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
           }),
         });
       } else {
         const formData = new FormData();
-        formData.append("file", file!);
-        formData.append("source", sourceName || file!.name);
+        formData.append("file", finalFile!);
+        formData.append("source", sourceName || finalFile!.name);
         startRes = await fetch("/api/import", { method: "POST", body: formData });
       }
 
@@ -195,15 +274,15 @@ export function ImportPageClient() {
       // ── STAGE 2: Process (AI extraction) ────────────────────────────
       let processRes: Response;
 
-      if (mode === "text") {
+      if (finalMode === "text") {
         processRes = await fetch(`/api/import/${startData.jobId}/process`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ textContent: textContent.trim() }),
+          body: JSON.stringify({ textContent: extractedPdfText || textContent.trim() }),
         });
       } else {
         const processForm = new FormData();
-        processForm.append("file", file!);
+        processForm.append("file", finalFile!);
         processRes = await fetch(`/api/import/${startData.jobId}/process`, {
           method: "POST",
           body: processForm,
@@ -424,8 +503,8 @@ export function ImportPageClient() {
               )}
             </button>
             {isLoading && (
-              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                {uploading ? "Uploading…" : "Gemini is reading your content. This may take 15–30 seconds."}
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 8 }}>
+                {uploading ? "Uploading…" : "AI is analyzing your content. This may take 15–30 seconds."}
               </div>
             )}
           </div>

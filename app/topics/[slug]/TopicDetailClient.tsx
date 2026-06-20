@@ -13,6 +13,7 @@ type Question = {
   id: number; question: string; difficulty: string;
   optionA: string; optionB: string; optionC: string; optionD: string;
   correctOption: string; shortExplanation: string | null;
+  examName?: string | null;
 };
 type NoteData = {
   note: { id: number; content: string; aiModel: string; createdAt: string };
@@ -188,7 +189,9 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
               </div>
               <div style={{ padding: "18px", display: "flex", alignItems: "center", gap: 12, fontSize: 14, color: "var(--text-muted)" }}>
                 <div className="spinner" />
-                Calling Gemini AI to generate your revision note…
+                <div>
+                  Generating your comprehensive revision note…
+                </div>
               </div>
             </div>
           )}
@@ -244,7 +247,10 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
             <div key={q.id} className="question-card">
               <div className="question-card-header">
                 <div className="question-text-main">{q.question}</div>
-                <span className={`badge ${diffColor(q.difficulty)}`}>{q.difficulty}</span>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <span className={`badge ${diffColor(q.difficulty)}`}>{q.difficulty}</span>
+                  {q.examName && <span className="badge badge-purple" style={{ fontWeight: 600 }}>🏛️ {q.examName}</span>}
+                </div>
               </div>
               <div className="question-options">
                 {(["A", "B", "C", "D"] as const).map((opt) => {

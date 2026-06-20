@@ -40,6 +40,7 @@ const ExtractedQuestionSchema = z.object({
   difficulty: z.string().optional().default("medium"),
   topic: z.string().min(2, "topic too short (min 2 chars)"),
   category: z.string().min(2, "category too short"),
+  exam_name: z.string().nullable().optional(),
 });
 
 /**
@@ -91,6 +92,7 @@ export type ValidatedExtractedQuestion = {
   difficulty: ValidDifficulty;
   topic: string;           // normalized display name
   category: ValidCategory; // enforced from VALID_CATEGORIES
+  examName?: string | null;
 };
 
 export type ValidatedTopicGeneratorResponse = {
@@ -216,6 +218,7 @@ export const validationService = {
         difficulty,
         topic,
         category,
+        examName: raw.exam_name || null,
       });
     }
 

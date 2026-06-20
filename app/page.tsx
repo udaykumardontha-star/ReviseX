@@ -1,17 +1,11 @@
 import type { Metadata } from "next";
-import { revisionService } from "@/services";
-import { DashboardClient } from "./DashboardClient";
+import { HomeClient } from "./HomeClient";
 
 export const metadata: Metadata = {
-  title: "Dashboard | ReviseX",
-  description: "Your SSC exam revision dashboard — streak, stats, and topics needing attention.",
+  title: "Search | ReviseX",
+  description: "Search your questions, topics, and notes.",
 };
 
-export const dynamic = "force-dynamic";
-
-export default async function DashboardPage() {
-  const result = await revisionService.getDashboardData();
-  const data = result.success ? result.data : null;
-
-  return <DashboardClient data={data} />;
+export default function Home() {
+  return <HomeClient />;
 }

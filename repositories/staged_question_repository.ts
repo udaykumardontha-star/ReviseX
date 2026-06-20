@@ -32,6 +32,7 @@ export type CreateStagedQuestionInput = {
   difficulty: ValidDifficulty;
   topic: string;
   category: ValidCategory;
+  examName?: string | null;
 };
 
 export type StagedQuestionUpdate = Partial<{
@@ -117,6 +118,7 @@ export const stagedQuestionRepository = {
             difficulty: input.difficulty,
             topic: input.topic,
             category: input.category,
+            examName: input.examName ?? null,
             status: "pending",
             createdAt: now,
             updatedAt: now,

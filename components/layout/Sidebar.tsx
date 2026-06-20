@@ -4,12 +4,10 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: "🏠", group: "Overview" },
-  { href: "/import", label: "Import", icon: "📥", group: "Library" },
+  { href: "/", label: "Search", icon: "🔍", group: "Overview" },
   { href: "/topics", label: "Topics", icon: "🗂️", group: "Library" },
-  { href: "/questions", label: "Questions", icon: "❓", group: "Library" },
-  { href: "/search", label: "Search", icon: "🔍", group: "Library" },
-  { href: "/settings", label: "Settings", icon: "⚙️", group: "System" },
+  { href: "/import", label: "Import", icon: "📥", group: "Library" },
+  { href: "/facts", label: "Daily Facts", icon: "💡", group: "Overview" },
 ];
 
 export function Sidebar() {
