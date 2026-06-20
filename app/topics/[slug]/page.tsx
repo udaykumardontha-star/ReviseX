@@ -36,7 +36,12 @@ export default async function TopicDetailPage({
     const noteResult = await noteService.getNoteByTopicSlug(slug);
     if (noteResult.success) {
       initialNote = {
-        note: noteResult.data,
+        note: {
+          id: noteResult.data.id,
+          content: noteResult.data.content,
+          aiModel: noteResult.data.aiModel ?? "Unknown",
+          createdAt: noteResult.data.createdAt,
+        },
         keywords: noteResult.data.keywordList,
         facts: noteResult.data.factList,
         wasFromCache: true,
