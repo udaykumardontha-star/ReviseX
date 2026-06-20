@@ -86,8 +86,8 @@ async function run() {
         const tx = await remoteClient.transaction("write");
         try {
           for (const row of batch) {
-             // Convert array values
-             const args = columns.map(col => row[col]);
+             // Convert array values and handle undefined
+             const args = columns.map(col => row[col] ?? null) as any[];
              await tx.execute({ sql: insertSql, args });
           }
           await tx.commit();
