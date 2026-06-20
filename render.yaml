@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: revisex
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATABASE_URL
+        value: file:/data/sqlite.db
+      - key: GEMINI_API_KEY
+        sync: false
+    disk:
+      name: sqlite-data
+      mountPath: /data
+      sizeGB: 1
