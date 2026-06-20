@@ -22,14 +22,17 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Art & Culture": "badge-purple", "Current Affairs": "badge-blue", Miscellaneous: "badge-gray",
 };
 
-export function TopicsPageClient() {
-  const [data, setData] = useState<ListData | null>(null);
-  const [loading, setLoading] = useState(true);
+type Props = { initialData?: ListData | null };
+
+export function TopicsPageClient({ initialData }: Props) {
+  const [data, setData] = useState<ListData | null>(initialData ?? null);
+  const [loading, setLoading] = useState(!initialData);
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 24;
+  const [isInitialMount, setIsInitialMount] = useState(true);
 
   const fetchTopics = useCallback(async () => {
     setLoading(true);
@@ -46,7 +49,13 @@ export function TopicsPageClient() {
     setLoading(false);
   }, [category, status, q, page]);
 
-  useEffect(() => { void fetchTopics(); }, [fetchTopics]);
+  useEffect(() => {
+    if (isInitialMount && initialData) {
+      setIsInitialMount(false);
+      return;
+    }
+    void fetchTopics();
+  }, [fetchTopics]);
 
   const totalPages = data ? Math.ceil(data.total / pageSize) : 1;
 

@@ -64,6 +64,7 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
   // Load questions when that tab is active
   useEffect(() => {
     if (activeTab !== "questions" || !topic) return;
+    if (questions.length > 0) return; // Already loaded!
     const loadQuestions = async () => {
       setQLoading(true);
       const r = await fetch(`/api/questions?topicId=${topic.id}&pageSize=30`);
@@ -74,7 +75,7 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
       setQLoading(false);
     };
     void loadQuestions();
-  }, [activeTab, topic]);
+  }, [activeTab, topic, questions.length]);
 
   const startRevision = async () => {
     setRevising(true);
