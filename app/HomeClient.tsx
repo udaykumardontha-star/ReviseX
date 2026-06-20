@@ -105,6 +105,7 @@ function SearchContent() {
             onChange={(e) => handleInput(e.target.value)}
             style={{ padding: "0 16px", fontSize: 16, height: 48, width: "100%" }}
             autoFocus
+            autoComplete="off"
           />
           {loading && (
             <div className="spinner" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)" }} />
@@ -181,9 +182,10 @@ function SearchContent() {
                       {r.title}
                     </div>
                     {r.snippet && (
-                      <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
-                        {r.snippet.slice(0, 180)}{r.snippet.length > 180 ? "…" : ""}
-                      </div>
+                      <div 
+                        style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 }}
+                        dangerouslySetInnerHTML={{ __html: r.snippet }}
+                      />
                     )}
                   </div>
                   <span style={{ fontSize: 18, flexShrink: 0, color: "var(--text-muted)" }}>→</span>

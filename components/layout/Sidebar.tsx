@@ -16,8 +16,7 @@ export function Sidebar() {
   return (
     <aside className="app-sidebar">
       <div className="sidebar-logo">
-        <img src="/icon-192.png" alt="ReviseX" style={{ width: 32, height: 32, borderRadius: 6 }} />
-        <span className="sidebar-logo-text">ReviseX</span>
+        <img src="/logo-horizontal.png" alt="ReviseX" style={{ height: 32, objectFit: "contain", maxWidth: "100%" }} />
       </div>
 
       <nav className="sidebar-nav">

@@ -818,7 +818,9 @@ code, pre, kbd { font-family: 'JetBrains Mono', monospace; }
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; --bottom-nav-h: 64px; }
   .app-shell { grid-template-columns: 1fr; }
-  .app-main { grid-column: 1; padding: 16px; padding-bottom: calc(16px + var(--bottom-nav-h)); }
+  .app-main { grid-column: 1; padding: 10px 4px; padding-bottom: calc(16px + var(--bottom-nav-h)); }
+  .card { padding: 14px 10px; border-radius: 12px; border-left: none; border-right: none; }
+  .search-result-card { padding: 12px 10px; border-radius: 8px; border-left: none; border-right: none; }
   .stat-grid { grid-template-columns: 1fr 1fr; }
   .options-grid { grid-template-columns: 1fr; }
   .topics-grid { grid-template-columns: 1fr; }

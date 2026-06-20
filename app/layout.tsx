@@ -8,7 +8,6 @@ export const metadata: Metadata = {
   description: "Your intelligent SSC exam revision companion — import PDFs, screenshots & text, review questions, and generate AI-powered notes.",
   keywords: ["SSC", "exam", "revision", "MCQ", "study", "notes", "AI"],
   manifest: "/manifest.json",
-  icons: { icon: "/favicon.ico", apple: "/apple-touch-icon.png" },
   authors: [{ name: "ReviseX" }],
   appleWebApp: { capable: true, statusBarStyle: "default", title: "ReviseX" },
 };
