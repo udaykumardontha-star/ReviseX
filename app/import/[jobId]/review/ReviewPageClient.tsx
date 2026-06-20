@@ -6,6 +6,7 @@ type StagedQuestion = {
   id: number; status: "pending" | "approved" | "rejected";
   question: string; answer: string; explanation: string | null;
   difficulty: string; topic: string; category: string;
+  examName: string | null;
   parsedOptions: { A: string; B: string; C: string; D: string };
 };
 type Stats = { pending: number; approved: number; rejected: number; total: number };
@@ -245,7 +246,14 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
           {items.map((q) => (
             <div key={q.id} className={`review-card ${q.status}`}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                <div className="question-text" style={{ flex: 1 }}>{q.question}</div>
+                <div style={{ flex: 1 }}>
+                  <div className="question-text">{q.question}</div>
+                  {q.examName && (
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, fontWeight: 500 }}>
+                      🏷️ {q.examName}
+                    </div>
+                  )}
+                </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   <span className={`badge ${difficultyColor(q.difficulty)}`}>{q.difficulty}</span>
                   <span className="badge badge-gray">{q.category}</span>
