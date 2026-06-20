@@ -9,36 +9,12 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
 
-  // ESLint — enforce during builds
-  eslint: {
-    ignoreDuringBuilds: false,
-  },
-
-  // Experimental features for Next.js 15
+  // Experimental features for Next.js 16
   experimental: {
-    // Server Actions are stable in Next.js 15
+    // Server Actions are stable
     serverActions: {
       bodySizeLimit: "50mb", // Allow large PDF uploads
     },
-  },
-
-  // Webpack configuration for better-sqlite3 (native module)
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // Externalize native Node.js modules that should not be bundled
-      config.externals = config.externals || [];
-      if (Array.isArray(config.externals)) {
-        config.externals.push("better-sqlite3");
-      }
-    }
-
-    // Handle .node native addon files
-    config.module.rules.push({
-      test: /\.node$/,
-      use: "node-loader",
-    });
-
-    return config;
   },
 
   // Headers for PWA and security
