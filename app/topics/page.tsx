@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function TopicsPage() {
-  const result = await topicService.listTopics({ page: 1, pageSize: 24 });
+  const result = await topicService.listTopics({ page: 1, limit: 24 });
   const initialData = result.success ? result.data : null;
   return <TopicsPageClient initialData={initialData} />;
 }
