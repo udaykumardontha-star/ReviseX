@@ -72,10 +72,10 @@ export const stagedQuestionRepository = {
    * Inserts a single staged question.
    * Options are serialized to JSON for storage.
    */
-  create(input: CreateStagedQuestionInput): StagedQuestion {
+  async create(input: CreateStagedQuestionInput): Promise<StagedQuestion> {
     const now = new Date().toISOString();
 
-    return db
+    return await db
       .insert(stagedQuestions)
       .values({
         importJobId: input.importJobId,
@@ -99,15 +99,15 @@ export const stagedQuestionRepository = {
    * Returns the count of rows inserted.
    * Skips the entire batch on error (atomic).
    */
-  createMany(inputs: CreateStagedQuestionInput[]): number {
+  async createMany(inputs: CreateStagedQuestionInput[]): Promise<number> {
     if (inputs.length === 0) return 0;
 
     const now = new Date().toISOString();
 
-    return db.transaction(() => {
+    return await db.transaction(async (tx) => {
       let count = 0;
       for (const input of inputs) {
-        db.insert(stagedQuestions)
+        await tx.insert(stagedQuestions)
           .values({
             importJobId: input.importJobId,
             question: input.question,
@@ -131,8 +131,8 @@ export const stagedQuestionRepository = {
   /**
    * Finds a staged question by primary key.
    */
-  findById(id: number): StagedQuestion | undefined {
-    return db
+  async findById(id: number): Promise<StagedQuestion | undefined> {
+    return await db
       .select()
       .from(stagedQuestions)
       .where(eq(stagedQuestions.id, id))
@@ -142,10 +142,10 @@ export const stagedQuestionRepository = {
   /**
    * Returns a paginated, filtered list of staged questions.
    */
-  findAll(options: StagedQuestionFilterOptions = {}): {
+  async findAll(options: StagedQuestionFilterOptions = {}): Promise<{
     items: StagedQuestion[];
     total: number;
-  } {
+  }> {
     const { importJobId, status, category, limit = 50, offset = 0 } = options;
 
     const conditions = [];
@@ -162,7 +162,7 @@ export const stagedQuestionRepository = {
     const whereClause =
       conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [items, countResult] = [
+    const [items, countResult] = await Promise.all([
       db
         .select()
         .from(stagedQuestions)
@@ -177,16 +177,16 @@ export const stagedQuestionRepository = {
         .from(stagedQuestions)
         .where(whereClause)
         .get(),
-    ];
+    ]);
 
-    return { items, total: countResult?.count ?? 0 };
+    return { items, total: Number(countResult?.count ?? 0) };
   },
 
   /**
    * Returns all pending staged questions for a given import job.
    */
-  findPendingByJobId(importJobId: number): StagedQuestion[] {
-    return db
+  async findPendingByJobId(importJobId: number): Promise<StagedQuestion[]> {
+    return await db
       .select()
       .from(stagedQuestions)
       .where(
@@ -203,12 +203,12 @@ export const stagedQuestionRepository = {
    * Returns all approved staged questions for promotion to the question bank.
    * Optionally scoped to a single import job.
    */
-  findApproved(importJobId?: number): StagedQuestion[] {
+  async findApproved(importJobId?: number): Promise<StagedQuestion[]> {
     const conditions = [eq(stagedQuestions.status, "approved")];
     if (importJobId !== undefined) {
       conditions.push(eq(stagedQuestions.importJobId, importJobId));
     }
-    return db
+    return await db
       .select()
       .from(stagedQuestions)
       .where(and(...conditions))
@@ -220,7 +220,7 @@ export const stagedQuestionRepository = {
    * Updates a staged question's editable fields.
    * Only mutable fields are allowed — status changes use dedicated methods.
    */
-  update(id: number, data: StagedQuestionUpdate): StagedQuestion | undefined {
+  async update(id: number, data: StagedQuestionUpdate): Promise<StagedQuestion | undefined> {
     const updatePayload: Record<string, unknown> = {
       updatedAt: new Date().toISOString(),
     };
@@ -239,7 +239,7 @@ export const stagedQuestionRepository = {
     if (data.reviewNote !== undefined)
       updatePayload["reviewNote"] = data.reviewNote;
 
-    return db
+    return await db
       .update(stagedQuestions)
       .set(updatePayload)
       .where(eq(stagedQuestions.id, id))
@@ -250,8 +250,8 @@ export const stagedQuestionRepository = {
   /**
    * Approves a staged question for promotion.
    */
-  approve(id: number): StagedQuestion | undefined {
-    return db
+  async approve(id: number): Promise<StagedQuestion | undefined> {
+    return await db
       .update(stagedQuestions)
       .set({ status: "approved", updatedAt: new Date().toISOString() })
       .where(
@@ -267,8 +267,8 @@ export const stagedQuestionRepository = {
   /**
    * Rejects a staged question with an optional review note.
    */
-  reject(id: number, reviewNote?: string): StagedQuestion | undefined {
-    return db
+  async reject(id: number, reviewNote?: string): Promise<StagedQuestion | undefined> {
+    return await db
       .update(stagedQuestions)
       .set({
         status: "rejected",
@@ -290,10 +290,10 @@ export const stagedQuestionRepository = {
    * Executes in a single transaction.
    * Returns the count of questions approved.
    */
-  approveAllPending(importJobId: number): number {
+  async approveAllPending(importJobId: number): Promise<number> {
     const now = new Date().toISOString();
 
-    const result = db
+    const result = await db
       .update(stagedQuestions)
       .set({ status: "approved", updatedAt: now })
       .where(
@@ -312,8 +312,8 @@ export const stagedQuestionRepository = {
    * Bulk-rejects all pending questions for an import job.
    * Returns the count of questions rejected.
    */
-  rejectAllPending(importJobId: number): number {
-    const result = db
+  async rejectAllPending(importJobId: number): Promise<number> {
+    const result = await db
       .update(stagedQuestions)
       .set({
         status: "rejected",
@@ -335,13 +335,13 @@ export const stagedQuestionRepository = {
   /**
    * Bulk-updates the status of specific IDs in a single transaction.
    */
-  bulkUpdateStatus(
+  async bulkUpdateStatus(
     ids: number[],
     status: QuestionStatus
-  ): number {
+  ): Promise<number> {
     if (ids.length === 0) return 0;
 
-    const result = db
+    const result = await db
       .update(stagedQuestions)
       .set({ status, updatedAt: new Date().toISOString() })
       .where(inArray(stagedQuestions.id, ids))
@@ -354,13 +354,13 @@ export const stagedQuestionRepository = {
   /**
    * Returns review queue stats for a given import job (or all jobs if omitted).
    */
-  getReviewStats(importJobId?: number): ReviewQueueStats {
+  async getReviewStats(importJobId?: number): Promise<ReviewQueueStats> {
     const condition =
       importJobId !== undefined
         ? eq(stagedQuestions.importJobId, importJobId)
         : undefined;
 
-    const result = db
+    const result = await db
       .select({
         pending: sql<number>`SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END)`,
         approved: sql<number>`SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END)`,
@@ -372,10 +372,10 @@ export const stagedQuestionRepository = {
       .get();
 
     return {
-      pending: result?.pending ?? 0,
-      approved: result?.approved ?? 0,
-      rejected: result?.rejected ?? 0,
-      total: result?.total ?? 0,
+      pending: Number(result?.pending ?? 0),
+      approved: Number(result?.approved ?? 0),
+      rejected: Number(result?.rejected ?? 0),
+      total: Number(result?.total ?? 0),
     };
   },
 
@@ -383,8 +383,8 @@ export const stagedQuestionRepository = {
    * Deletes all staged questions for an import job.
    * Used when cleaning up a failed/deleted import job.
    */
-  deleteByJobId(importJobId: number): number {
-    const result = db
+  async deleteByJobId(importJobId: number): Promise<number> {
+    const result = await db
       .delete(stagedQuestions)
       .where(eq(stagedQuestions.importJobId, importJobId))
       .returning()

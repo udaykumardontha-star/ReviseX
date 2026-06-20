@@ -13,7 +13,7 @@ export async function GET(
   const pageSize = parseInt(req.nextUrl.searchParams.get("pageSize") ?? "20", 10);
   const statusParam = req.nextUrl.searchParams.get("status") as "pending" | "approved" | "rejected" | null;
 
-  const result = stagingService.getReviewQueue(
+  const result = await stagingService.getReviewQueue(
     jobId,
     page,
     pageSize,

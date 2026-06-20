@@ -14,7 +14,7 @@
  *   4. Seed system_settings row if not present
  */
 
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { migrate } from "drizzle-orm/libsql/migrator";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { db, rawSqlite } from "../db/connection";
@@ -23,71 +23,77 @@ import { eq } from "drizzle-orm";
 
 const ROOT = process.cwd();
 
-// ─── Step 1: Drizzle ORM migrations ──────────────────────────────────────────
-console.log("\n[migrate] ▶ Step 1: Applying Drizzle migrations…");
-migrate(db, {
-  migrationsFolder: resolve(ROOT, "drizzle"),
+async function runMigrations() {
+  // ─── Step 1: Drizzle ORM migrations ──────────────────────────────────────────
+  console.log("\n[migrate] ▶ Step 1: Applying Drizzle migrations…");
+  await migrate(db, {
+    migrationsFolder: resolve(ROOT, "drizzle"),
+  });
+  console.log("[migrate] ✓ Drizzle migrations complete.");
+
+  // ─── Step 2: FTS5 virtual tables ─────────────────────────────────────────────
+  console.log("\n[migrate] ▶ Step 2: Applying FTS5 table definitions…");
+  const fts5TablesSQL = readFileSync(
+    resolve(ROOT, "db/migrations/fts5_tables.sql"),
+    "utf-8"
+  );
+
+  // Execute each statement individually (better-sqlite3 doesn't support multi-statement exec)
+  const fts5TableStatements = parseSqlStatements(fts5TablesSQL);
+  for (const stmt of fts5TableStatements) {
+    await rawSqlite.execute(stmt);
+  }
+  console.log(
+    `[migrate] ✓ FTS5 tables applied (${fts5TableStatements.length} statements).`
+  );
+
+  // ─── Step 3: FTS5 triggers ───────────────────────────────────────────────────
+  console.log("\n[migrate] ▶ Step 3: Applying FTS5 synchronization triggers…");
+  const fts5TriggersSQL = readFileSync(
+    resolve(ROOT, "db/migrations/fts5_triggers.sql"),
+    "utf-8"
+  );
+
+  const fts5TriggerStatements = parseSqlStatements(fts5TriggersSQL);
+  for (const stmt of fts5TriggerStatements) {
+    await rawSqlite.execute(stmt);
+  }
+  console.log(
+    `[migrate] ✓ FTS5 triggers applied (${fts5TriggerStatements.length} statements).`
+  );
+
+  // ─── Step 4: Seed system_settings ────────────────────────────────────────────
+  console.log("\n[migrate] ▶ Step 4: Seeding system_settings…");
+
+  const existingSettingsRes = await db
+    .select()
+    .from(systemSettings)
+    .where(eq(systemSettings.id, 1));
+  const existingSettings = existingSettingsRes[0];
+
+  if (!existingSettings) {
+    await db.insert(systemSettings)
+      .values({
+        id: 1,
+        databaseVersion: "v1",
+        maxAiCallsPerDay: 50,
+        maxQuestionsPerChunk: 30,
+        pdfChunkSize: 10,
+        aiCallsTodayCount: 0,
+      });
+    console.log("[migrate] ✓ system_settings seeded with default values.");
+  } else {
+    console.log("[migrate] ✓ system_settings already exists — skipping seed.");
+  }
+
+  // ─── Done ─────────────────────────────────────────────────────────────────────
+  console.log("\n[migrate] ✅ All migrations complete. Database is ready.\n");
+}
+
+runMigrations().catch(e => {
+  console.error("Migration failed:", e);
+  process.exit(1);
 });
-console.log("[migrate] ✓ Drizzle migrations complete.");
-
-// ─── Step 2: FTS5 virtual tables ─────────────────────────────────────────────
-console.log("\n[migrate] ▶ Step 2: Applying FTS5 table definitions…");
-const fts5TablesSQL = readFileSync(
-  resolve(ROOT, "db/migrations/fts5_tables.sql"),
-  "utf-8"
-);
-
-// Execute each statement individually (better-sqlite3 doesn't support multi-statement exec)
-const fts5TableStatements = parseSqlStatements(fts5TablesSQL);
-for (const stmt of fts5TableStatements) {
-  rawSqlite.exec(stmt);
-}
-console.log(
-  `[migrate] ✓ FTS5 tables applied (${fts5TableStatements.length} statements).`
-);
-
-// ─── Step 3: FTS5 triggers ───────────────────────────────────────────────────
-console.log("\n[migrate] ▶ Step 3: Applying FTS5 synchronization triggers…");
-const fts5TriggersSQL = readFileSync(
-  resolve(ROOT, "db/migrations/fts5_triggers.sql"),
-  "utf-8"
-);
-
-const fts5TriggerStatements = parseSqlStatements(fts5TriggersSQL);
-for (const stmt of fts5TriggerStatements) {
-  rawSqlite.exec(stmt);
-}
-console.log(
-  `[migrate] ✓ FTS5 triggers applied (${fts5TriggerStatements.length} statements).`
-);
-
-// ─── Step 4: Seed system_settings ────────────────────────────────────────────
-console.log("\n[migrate] ▶ Step 4: Seeding system_settings…");
-
-const existingSettings = db
-  .select()
-  .from(systemSettings)
-  .where(eq(systemSettings.id, 1))
-  .get();
-
-if (!existingSettings) {
-  db.insert(systemSettings)
-    .values({
-      id: 1,
-      databaseVersion: "v1",
-      maxAiCallsPerDay: 50,
-      maxQuestionsPerChunk: 30,
-      pdfChunkSize: 10,
-      aiCallsTodayCount: 0,
-    })
-    .run();
-  console.log("[migrate] ✓ system_settings seeded with default values.");
-} else {
-  console.log("[migrate] ✓ system_settings already exists — skipping seed.");
-}
-
-// ─── Done ─────────────────────────────────────────────────────────────────────
-console.log("\n[migrate] ✅ All migrations complete. Database is ready.\n");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

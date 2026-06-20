@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
-  const result = noteService.getNoteByTopicSlug(slug);
+  const result = await noteService.getNoteByTopicSlug(slug);
   if (!result.success) {
     return NextResponse.json({ error: result.error, code: result.code }, { status: 404 });
   }

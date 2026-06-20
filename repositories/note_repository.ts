@@ -86,15 +86,15 @@ export const noteRepository = {
    * Executes entirely in a single transaction.
    * Returns undefined if a note for the topic already exists.
    */
-  create(input: CreateNoteInput): Note | undefined {
-    const existing = noteRepository.findByTopicId(input.topicId);
+  async create(input: CreateNoteInput): Promise<Note | undefined> {
+    const existing = await noteRepository.findByTopicId(input.topicId);
     if (existing) return undefined;
 
     const now = new Date().toISOString();
 
-    return db.transaction(() => {
+    return await db.transaction(async (tx) => {
       // 1. Insert the note
-      const note = db
+      const note = await tx
         .insert(notes)
         .values({
           topicId: input.topicId,
@@ -117,7 +117,7 @@ export const noteRepository = {
         input.keywords.map((k) => k.toLowerCase().trim()).filter(Boolean)
       )];
       for (const keyword of uniqueKeywords) {
-        db.insert(noteKeywords)
+        await tx.insert(noteKeywords)
           .values({ noteId: note.id, keyword })
           .onConflictDoNothing()
           .run();
@@ -128,7 +128,7 @@ export const noteRepository = {
       for (let i = 0; i < uniqueFacts.length; i++) {
         const fact = uniqueFacts[i];
         if (fact) {
-          db.insert(noteFacts)
+          await tx.insert(noteFacts)
             .values({ noteId: note.id, fact, sortOrder: i })
             .onConflictDoNothing()
             .run();
@@ -148,22 +148,22 @@ export const noteRepository = {
    *   4. Update notes row with new content
    * All steps run in a single transaction — if any step fails, rolls back.
    */
-  update(noteId: number, input: NoteUpdate): Note | undefined {
-    const existing = noteRepository.findById(noteId);
+  async update(noteId: number, input: NoteUpdate): Promise<Note | undefined> {
+    const existing = await noteRepository.findById(noteId);
     if (!existing) return undefined;
 
     const now = new Date().toISOString();
 
-    return db.transaction(() => {
+    return await db.transaction(async (tx) => {
       // 1. Snapshot existing content to version history
-      const versionCount = db
+      const versionCount = await tx
         .select({ count: sql<number>`COUNT(*)` })
         .from(notesVersions)
         .where(eq(notesVersions.noteId, noteId))
         .get();
-      const nextVersion = `v${(versionCount?.count ?? 0) + 1}`;
+      const nextVersion = `v${Number(versionCount?.count ?? 0) + 1}`;
 
-      db.insert(notesVersions)
+      await tx.insert(notesVersions)
         .values({
           noteId,
           content: existing.content,
@@ -173,24 +173,24 @@ export const noteRepository = {
         .run();
 
       // 2. Replace keywords
-      db.delete(noteKeywords).where(eq(noteKeywords.noteId, noteId)).run();
+      await tx.delete(noteKeywords).where(eq(noteKeywords.noteId, noteId)).run();
       const uniqueKeywords = [...new Set(
         input.keywords.map((k) => k.toLowerCase().trim()).filter(Boolean)
       )];
       for (const keyword of uniqueKeywords) {
-        db.insert(noteKeywords)
+        await tx.insert(noteKeywords)
           .values({ noteId, keyword })
           .onConflictDoNothing()
           .run();
       }
 
       // 3. Replace facts
-      db.delete(noteFacts).where(eq(noteFacts.noteId, noteId)).run();
+      await tx.delete(noteFacts).where(eq(noteFacts.noteId, noteId)).run();
       const uniqueFacts = [...new Set(input.facts.map((f) => f.trim()).filter(Boolean))];
       for (let i = 0; i < uniqueFacts.length; i++) {
         const fact = uniqueFacts[i];
         if (fact) {
-          db.insert(noteFacts)
+          await tx.insert(noteFacts)
             .values({ noteId, fact, sortOrder: i })
             .onConflictDoNothing()
             .run();
@@ -198,7 +198,7 @@ export const noteRepository = {
       }
 
       // 4. Update the note itself
-      return db
+      return await tx
         .update(notes)
         .set({
           content: input.content,
@@ -219,8 +219,8 @@ export const noteRepository = {
   /**
    * Finds a note by primary key.
    */
-  findById(id: number): Note | undefined {
-    return db
+  async findById(id: number): Promise<Note | undefined> {
+    return await db
       .select()
       .from(notes)
       .where(and(eq(notes.id, id), eq(notes.isDeleted, false)))
@@ -231,8 +231,8 @@ export const noteRepository = {
    * Finds a note by its topic ID.
    * Returns undefined if no note exists or is soft-deleted.
    */
-  findByTopicId(topicId: number): Note | undefined {
-    return db
+  async findByTopicId(topicId: number): Promise<Note | undefined> {
+    return await db
       .select()
       .from(notes)
       .where(and(eq(notes.topicId, topicId), eq(notes.isDeleted, false)))
@@ -242,10 +242,9 @@ export const noteRepository = {
   /**
    * Finds a note by topic slug (requires JOIN).
    */
-  findByTopicSlug(slug: string): NoteWithMeta | undefined {
-    const result = rawSqlite
-      .prepare(
-        `SELECT
+  async findByTopicSlug(slug: string): Promise<NoteWithMeta | undefined> {
+    const resultObj = await rawSqlite.execute({
+        sql: `SELECT
           n.*,
           t.name     AS topicName,
           t.slug     AS topicSlug,
@@ -256,9 +255,11 @@ export const noteRepository = {
         WHERE t.slug = ?
           AND n.is_deleted = 0
           AND t.is_deleted = 0
-        LIMIT 1`
-      )
-      .get(slug) as
+        LIMIT 1`,
+        args: [slug]
+    });
+    
+    const result = resultObj.rows[0] as unknown as
       | (Note & {
           topicName: string;
           topicSlug: string;
@@ -269,11 +270,12 @@ export const noteRepository = {
 
     if (!result) return undefined;
 
-    const keywords = noteRepository.getKeywords(result.id);
-    const facts = noteRepository.getFacts(result.id);
+    const keywords = await noteRepository.getKeywords(result.id);
+    const facts = await noteRepository.getFacts(result.id);
 
     return {
       ...result,
+      versionCount: Number(result.versionCount ?? 0),
       keywordList: keywords.map((k) => k.keyword),
       factList: facts.map((f) => f.fact),
     };
@@ -283,10 +285,9 @@ export const noteRepository = {
    * Returns all notes with metadata, ordered by most recently studied.
    * Used by the /revision and dashboard pages.
    */
-  findAll(limit: number = 50, offset: number = 0): NoteListItem[] {
-    return rawSqlite
-      .prepare(
-        `SELECT
+  async findAll(limit: number = 50, offset: number = 0): Promise<NoteListItem[]> {
+    const resultsObj = await rawSqlite.execute({
+        sql: `SELECT
           n.id,
           n.topic_id      AS topicId,
           n.generated_from AS generatedFrom,
@@ -306,9 +307,11 @@ export const noteRepository = {
         WHERE n.is_deleted = 0
           AND t.is_deleted = 0
         ORDER BY n.last_studied_at DESC NULLS LAST, n.updated_at DESC
-        LIMIT ? OFFSET ?`
-      )
-      .all(limit, offset) as NoteListItem[];
+        LIMIT ? OFFSET ?`,
+        args: [limit, offset]
+    });
+    
+    return resultsObj.rows as unknown as NoteListItem[];
   },
 
   // ─── Keywords & Facts ─────────────────────────────────────────────────────
@@ -316,8 +319,8 @@ export const noteRepository = {
   /**
    * Returns all keywords for a note.
    */
-  getKeywords(noteId: number): NoteKeyword[] {
-    return db
+  async getKeywords(noteId: number): Promise<NoteKeyword[]> {
+    return await db
       .select()
       .from(noteKeywords)
       .where(eq(noteKeywords.noteId, noteId))
@@ -328,8 +331,8 @@ export const noteRepository = {
   /**
    * Returns all facts for a note, sorted by sort_order.
    */
-  getFacts(noteId: number): NoteFact[] {
-    return db
+  async getFacts(noteId: number): Promise<NoteFact[]> {
+    return await db
       .select()
       .from(noteFacts)
       .where(eq(noteFacts.noteId, noteId))
@@ -341,10 +344,9 @@ export const noteRepository = {
    * Returns a random selection of facts across all notes.
    * Used by the /revision daily facts feature.
    */
-  getRandomFacts(count: number = 10): Array<NoteFact & { topicName: string; topicSlug: string }> {
-    return rawSqlite
-      .prepare(
-        `SELECT
+  async getRandomFacts(count: number = 10): Promise<Array<NoteFact & { topicName: string; topicSlug: string }>> {
+    const resultObj = await rawSqlite.execute({
+        sql: `SELECT
           nf.*,
           t.name AS topicName,
           t.slug AS topicSlug
@@ -353,9 +355,10 @@ export const noteRepository = {
         JOIN topics t ON t.id = n.topic_id
         WHERE n.is_deleted = 0 AND t.is_deleted = 0
         ORDER BY RANDOM()
-        LIMIT ?`
-      )
-      .all(count) as Array<NoteFact & { topicName: string; topicSlug: string }>;
+        LIMIT ?`,
+        args: [count]
+    });
+    return resultObj.rows as unknown as Array<NoteFact & { topicName: string; topicSlug: string }>;
   },
 
   // ─── Version History ──────────────────────────────────────────────────────
@@ -363,8 +366,8 @@ export const noteRepository = {
   /**
    * Returns all version snapshots for a note, newest first.
    */
-  getVersions(noteId: number): NoteVersion[] {
-    return db
+  async getVersions(noteId: number): Promise<NoteVersion[]> {
+    return await db
       .select()
       .from(notesVersions)
       .where(eq(notesVersions.noteId, noteId))
@@ -375,8 +378,8 @@ export const noteRepository = {
   /**
    * Returns a specific version snapshot.
    */
-  getVersion(versionId: number): NoteVersion | undefined {
-    return db
+  async getVersion(versionId: number): Promise<NoteVersion | undefined> {
+    return await db
       .select()
       .from(notesVersions)
       .where(eq(notesVersions.id, versionId))
@@ -387,25 +390,25 @@ export const noteRepository = {
    * Restores a specific version as the current note content.
    * Creates a snapshot of the current content first (as part of the same transaction).
    */
-  restoreVersion(noteId: number, versionId: number): Note | undefined {
-    const targetVersion = noteRepository.getVersion(versionId);
+  async restoreVersion(noteId: number, versionId: number): Promise<Note | undefined> {
+    const targetVersion = await noteRepository.getVersion(versionId);
     if (!targetVersion || targetVersion.noteId !== noteId) return undefined;
 
-    const existing = noteRepository.findById(noteId);
+    const existing = await noteRepository.findById(noteId);
     if (!existing) return undefined;
 
     const now = new Date().toISOString();
 
-    return db.transaction(() => {
+    return await db.transaction(async (tx) => {
       // Snapshot the current content before restoring
-      const versionCount = db
+      const versionCount = await tx
         .select({ count: sql<number>`COUNT(*)` })
         .from(notesVersions)
         .where(eq(notesVersions.noteId, noteId))
         .get();
-      const nextLabel = `v${(versionCount?.count ?? 0) + 1}`;
+      const nextLabel = `v${Number(versionCount?.count ?? 0) + 1}`;
 
-      db.insert(notesVersions)
+      await tx.insert(notesVersions)
         .values({
           noteId,
           content: existing.content,
@@ -415,7 +418,7 @@ export const noteRepository = {
         .run();
 
       // Restore the target version
-      return db
+      return await tx
         .update(notes)
         .set({
           content: targetVersion.content,
@@ -432,8 +435,8 @@ export const noteRepository = {
   /**
    * Increments view_count and updates last_studied_at.
    */
-  incrementViewed(id: number): void {
-    db.update(notes)
+  async incrementViewed(id: number): Promise<void> {
+    await db.update(notes)
       .set({
         viewCount: sql`${notes.viewCount} + 1`,
         lastStudiedAt: new Date().toISOString(),
@@ -446,8 +449,8 @@ export const noteRepository = {
   /**
    * Increments revision_count.
    */
-  incrementRevised(id: number): void {
-    db.update(notes)
+  async incrementRevised(id: number): Promise<void> {
+    await db.update(notes)
       .set({
         revisionCount: sql`${notes.revisionCount} + 1`,
         updatedAt: new Date().toISOString(),
@@ -461,8 +464,8 @@ export const noteRepository = {
   /**
    * Soft-deletes a note.
    */
-  softDelete(id: number): Note | undefined {
-    return db
+  async softDelete(id: number): Promise<Note | undefined> {
+    return await db
       .update(notes)
       .set({ isDeleted: true, updatedAt: new Date().toISOString() })
       .where(eq(notes.id, id))
@@ -473,8 +476,8 @@ export const noteRepository = {
   /**
    * Restores a soft-deleted note.
    */
-  restore(id: number): Note | undefined {
-    return db
+  async restore(id: number): Promise<Note | undefined> {
+    return await db
       .update(notes)
       .set({ isDeleted: false, updatedAt: new Date().toISOString() })
       .where(eq(notes.id, id))
@@ -485,10 +488,9 @@ export const noteRepository = {
   /**
    * Returns soft-deleted notes for the trash view.
    */
-  findDeleted(): NoteListItem[] {
-    return rawSqlite
-      .prepare(
-        `SELECT
+  async findDeleted(): Promise<NoteListItem[]> {
+    const resultObj = await rawSqlite.execute(`
+        SELECT
           n.id, n.topic_id AS topicId, n.generated_from AS generatedFrom,
           n.view_count AS viewCount, n.revision_count AS revisionCount,
           n.last_studied_at AS lastStudiedAt, n.ai_generated_at AS aiGeneratedAt,
@@ -499,9 +501,10 @@ export const noteRepository = {
         FROM notes n
         JOIN topics t ON t.id = n.topic_id
         WHERE n.is_deleted = 1
-        ORDER BY n.updated_at DESC`
-      )
-      .all() as NoteListItem[];
+        ORDER BY n.updated_at DESC
+    `);
+    
+    return resultObj.rows as unknown as NoteListItem[];
   },
 
   // ─── Stats ────────────────────────────────────────────────────────────────
@@ -509,38 +512,38 @@ export const noteRepository = {
   /**
    * Returns counts for dashboard display.
    */
-  getStats(): {
+  async getStats(): Promise<{
     totalNotes: number;
     totalFacts: number;
     totalKeywords: number;
     totalVersions: number;
-  } {
-    const noteCount = db
+  }> {
+    const noteCount = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(notes)
       .where(eq(notes.isDeleted, false))
       .get();
 
-    const factCount = db
+    const factCount = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(noteFacts)
       .get();
 
-    const keywordCount = db
+    const keywordCount = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(noteKeywords)
       .get();
 
-    const versionCount = db
+    const versionCount = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(notesVersions)
       .get();
 
     return {
-      totalNotes: noteCount?.count ?? 0,
-      totalFacts: factCount?.count ?? 0,
-      totalKeywords: keywordCount?.count ?? 0,
-      totalVersions: versionCount?.count ?? 0,
+      totalNotes: Number(noteCount?.count ?? 0),
+      totalFacts: Number(factCount?.count ?? 0),
+      totalKeywords: Number(keywordCount?.count ?? 0),
+      totalVersions: Number(versionCount?.count ?? 0),
     };
   },
 } as const;

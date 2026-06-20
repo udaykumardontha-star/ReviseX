@@ -23,7 +23,7 @@ export default async function TopicDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const result = topicService.getTopic(slug);
+  const result = await topicService.getTopic(slug);
 
   if (!result.success && result.code === "NOT_FOUND") {
     notFound();

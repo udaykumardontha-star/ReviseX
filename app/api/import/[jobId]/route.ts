@@ -9,7 +9,7 @@ export async function GET(
   const jobId = parseInt(jobIdStr, 10);
   if (isNaN(jobId)) return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
 
-  const result = importService.getProgress(jobId);
+  const result = await importService.getProgress(jobId);
   if (!result.success) {
     return NextResponse.json({ error: result.error, code: result.code }, { status: 404 });
   }
@@ -24,7 +24,7 @@ export async function DELETE(
   const jobId = parseInt(jobIdStr, 10);
   if (isNaN(jobId)) return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
 
-  const result = importService.deleteJob(jobId);
+  const result = await importService.deleteJob(jobId);
   if (!result.success) {
     return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
   }

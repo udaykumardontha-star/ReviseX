@@ -24,8 +24,8 @@ export const settingsRepository = {
    * Returns the singleton system_settings row (id=1).
    * Creates it with defaults if it doesn't exist.
    */
-  get(): SystemSettings {
-    const row = db
+  async get(): Promise<SystemSettings> {
+    const row = await db
       .select()
       .from(systemSettings)
       .where(eq(systemSettings.id, 1))
@@ -34,7 +34,7 @@ export const settingsRepository = {
     if (row) return row;
 
     // Auto-create the singleton row with defaults if absent
-    db.insert(systemSettings)
+    await db.insert(systemSettings)
       .values({
         id: 1,
         databaseVersion: "v1",
@@ -45,19 +45,22 @@ export const settingsRepository = {
       })
       .run();
 
-    return db
+    const newRow = await db
       .select()
       .from(systemSettings)
       .where(eq(systemSettings.id, 1))
-      .get()!;
+      .get();
+
+    if (!newRow) throw new Error("Failed to initialize system settings");
+    return newRow;
   },
 
   /**
    * Updates specific fields on the singleton settings row.
    * Always stamps updatedAt with the current UTC timestamp.
    */
-  update(data: SettingsUpdate): SystemSettings {
-    db.update(systemSettings)
+  async update(data: SettingsUpdate): Promise<SystemSettings> {
+    await db.update(systemSettings)
       .set({
         ...data,
         updatedAt: new Date().toISOString(),
@@ -65,7 +68,7 @@ export const settingsRepository = {
       .where(eq(systemSettings.id, 1))
       .run();
 
-    return settingsRepository.get();
+    return await settingsRepository.get();
   },
 
   /**
@@ -73,8 +76,8 @@ export const settingsRepository = {
    * Checks and resets the counter if the reset date is a past day.
    * Returns the new count after incrementing.
    */
-  incrementAiCallCount(): number {
-    const settings = settingsRepository.get();
+  async incrementAiCallCount(): Promise<number> {
+    const settings = await settingsRepository.get();
     const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
     let currentCount = settings.aiCallsTodayCount;
@@ -86,7 +89,7 @@ export const settingsRepository = {
 
     const newCount = currentCount + 1;
 
-    db.update(systemSettings)
+    await db.update(systemSettings)
       .set({
         aiCallsTodayCount: newCount,
         aiCallsResetDate: today,
@@ -102,15 +105,15 @@ export const settingsRepository = {
    * Rate limiting is DISABLED — always returns false.
    * ReviseX uses the API key freely with no daily cap.
    */
-  isAiRateLimitReached(): boolean {
+  async isAiRateLimitReached(): Promise<boolean> {
     return false; // No rate limit enforced
   },
 
   /**
    * Returns today's AI call usage as { used, limit, remaining }.
    */
-  getAiCallUsage(): { used: number; limit: number; remaining: number } {
-    const settings = settingsRepository.get();
+  async getAiCallUsage(): Promise<{ used: number; limit: number; remaining: number }> {
+    const settings = await settingsRepository.get();
     const today = new Date().toISOString().slice(0, 10);
     const used =
       settings.aiCallsResetDate === today ? settings.aiCallsTodayCount : 0;

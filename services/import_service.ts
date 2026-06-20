@@ -130,7 +130,7 @@ export const importService = {
     }
 
     // ── Golden Rule: Database First ───────────────────────────────────────
-    const existing = importJobRepository.findByHash(fileHash);
+    const existing = await importJobRepository.findByHash(fileHash);
     if (existing) {
       return err(
         `Duplicate detected. Already imported (job #${existing.id}, status: ${existing.status}).`,
@@ -140,8 +140,8 @@ export const importService = {
     }
 
     // ── Create source + job ───────────────────────────────────────────────
-    const source = sourceRepository.findOrCreate(input.sourceName);
-    const job = importJobRepository.create({
+    const source = await sourceRepository.findOrCreate(input.sourceName);
+    const job = await importJobRepository.create({
       fileName: input.fileName,
       fileSize: fileSizeBytes,
       fileHash,
@@ -183,7 +183,7 @@ export const importService = {
     textContent?: string,
     onProgress?: (progress: ImportJobProgress) => void
   ): Promise<Result<{ totalExtracted: number; totalSkipped: number }>> {
-    const job = importJobRepository.findById(jobId);
+    const job = await importJobRepository.findById(jobId);
     if (!job) {
       return err(`Import job #${jobId} not found`, null, "NOT_FOUND");
     }
@@ -192,9 +192,9 @@ export const importService = {
       return err(`Import job #${jobId} is already completed`, null, "VALIDATION_ERROR");
     }
 
-    importJobRepository.markProcessing(jobId);
+    await importJobRepository.markProcessing(jobId);
 
-    const settings = settingsRepository.get();
+    const settings = await settingsRepository.get();
     const maxQuestionsPerChunk = settings.maxQuestionsPerChunk;
 
     let totalExtracted = job.extractedQuestions;
@@ -205,7 +205,7 @@ export const importService = {
     const detectedType = fileBuffer ? detectFileType(mimeType) : "text";
 
     if (!detectedType) {
-      importJobRepository.markFailed(jobId);
+      await importJobRepository.markFailed(jobId);
       return err(`Unsupported MIME type: ${mimeType}`, null, "UNSUPPORTED_FORMAT");
     }
 
@@ -213,21 +213,21 @@ export const importService = {
     if (detectedType === "text") {
       const rawText = textContent ?? "";
       if (!rawText.trim()) {
-        importJobRepository.markFailed(jobId);
+        await importJobRepository.markFailed(jobId);
         return err("No text content provided for text import", null, "UNSUPPORTED_FORMAT");
       }
 
       const textResult = pdfProcessor.processText(rawText);
       if (!textResult.success) {
-        importJobRepository.markFailed(jobId);
+        await importJobRepository.markFailed(jobId);
         return textResult;
       }
 
       const { chunks } = textResult.data;
 
       for (const chunk of chunks) {
-        if (settingsRepository.isAiRateLimitReached()) {
-          importJobRepository.markPaused(jobId);
+        if (await settingsRepository.isAiRateLimitReached()) {
+          await importJobRepository.markPaused(jobId);
           return err(
             `AI daily rate limit reached after ${totalExtracted} questions. Job paused.`,
             { totalExtracted, totalSkipped, jobId },
@@ -236,11 +236,11 @@ export const importService = {
         }
 
         const aiResult = await geminiClient.extractQuestionsFromText(chunk.text);
-        settingsRepository.incrementAiCallCount();
+        await settingsRepository.incrementAiCallCount();
 
         if (!aiResult.success) {
           allFailedPages.push(chunk.chunkIndex);
-          importJobRepository.updateProgress(jobId, {
+          await importJobRepository.updateProgress(jobId, {
             currentPage: chunk.chunkIndex + 1,
             failedPages: allFailedPages,
             status: "processing",
@@ -248,7 +248,7 @@ export const importService = {
           continue;
         }
 
-        const stageResult = stageQuestionsFromAiResponse(
+        const stageResult = await stageQuestionsFromAiResponse(
           aiResult.data,
           jobId,
           maxQuestionsPerChunk
@@ -256,7 +256,7 @@ export const importService = {
         totalExtracted += stageResult.inserted;
         totalSkipped += stageResult.skipped;
 
-        importJobRepository.updateProgress(jobId, {
+        await importJobRepository.updateProgress(jobId, {
           currentPage: chunk.chunkIndex + 1,
           extractedQuestions: totalExtracted,
           failedPages: allFailedPages,
@@ -264,32 +264,32 @@ export const importService = {
         });
 
         if (onProgress) {
-          const progress = importJobRepository.getProgress(jobId);
+          const progress = await importJobRepository.getProgress(jobId);
           if (progress) onProgress(progress);
         }
       }
 
-      importJobRepository.markCompleted(jobId, totalExtracted);
+      await importJobRepository.markCompleted(jobId, totalExtracted);
       return ok({ totalExtracted, totalSkipped });
     }
 
     // ── IMAGE import ──────────────────────────────────────────────────────
     if (detectedType === "image") {
       if (!fileBuffer) {
-        importJobRepository.markFailed(jobId);
+        await importJobRepository.markFailed(jobId);
         return err("Image buffer is required for image import", null, "UNSUPPORTED_FORMAT");
       }
 
       const imageResult = pdfProcessor.processImage(fileBuffer, mimeType);
       if (!imageResult.success) {
-        importJobRepository.markFailed(jobId);
+        await importJobRepository.markFailed(jobId);
         return imageResult;
       }
 
       const chunk = imageResult.data;
 
-      if (settingsRepository.isAiRateLimitReached()) {
-        importJobRepository.markPaused(jobId);
+      if (await settingsRepository.isAiRateLimitReached()) {
+        await importJobRepository.markPaused(jobId);
         return err(
           "AI daily rate limit reached. Job paused — resume tomorrow.",
           { jobId },
@@ -301,14 +301,14 @@ export const importService = {
         chunk.base64Data,
         chunk.mimeType
       );
-      settingsRepository.incrementAiCallCount();
+      await settingsRepository.incrementAiCallCount();
 
       if (!aiResult.success) {
-        importJobRepository.markFailed(jobId);
+        await importJobRepository.markFailed(jobId);
         return aiResult;
       }
 
-      const stageResult = stageQuestionsFromAiResponse(
+      const stageResult = await stageQuestionsFromAiResponse(
         aiResult.data,
         jobId,
         maxQuestionsPerChunk
@@ -316,7 +316,7 @@ export const importService = {
       totalExtracted += stageResult.inserted;
       totalSkipped += stageResult.skipped;
 
-      importJobRepository.updateProgress(jobId, {
+      await importJobRepository.updateProgress(jobId, {
         currentPage: 1,
         extractedQuestions: totalExtracted,
         failedPages: allFailedPages,
@@ -324,23 +324,23 @@ export const importService = {
       });
 
       if (onProgress) {
-        const progress = importJobRepository.getProgress(jobId);
+        const progress = await importJobRepository.getProgress(jobId);
         if (progress) onProgress(progress);
       }
 
-      importJobRepository.markCompleted(jobId, totalExtracted);
+      await importJobRepository.markCompleted(jobId, totalExtracted);
       return ok({ totalExtracted, totalSkipped });
     }
 
     // ── PDF import ────────────────────────────────────────────────────────
     if (!fileBuffer) {
-      importJobRepository.markFailed(jobId);
+      await importJobRepository.markFailed(jobId);
       return err("PDF buffer is required for PDF import", null, "UNSUPPORTED_FORMAT");
     }
 
     const extractResult = await pdfProcessor.extractText(fileBuffer);
     if (!extractResult.success) {
-      importJobRepository.markFailed(jobId);
+      await importJobRepository.markFailed(jobId);
       return extractResult;
     }
 
@@ -349,7 +349,7 @@ export const importService = {
     const chunks = pdfProcessor.chunkByPages(fullText, pageCount, pagesPerChunk);
 
     if (chunks.length === 0) {
-      importJobRepository.markFailed(jobId);
+      await importJobRepository.markFailed(jobId);
       return err("No text chunks could be created from this PDF", null, "UNSUPPORTED_FORMAT");
     }
 
@@ -358,8 +358,8 @@ export const importService = {
     for (const chunk of chunks) {
       if (chunk.chunkIndex < resumeFromChunk) continue;
 
-      if (settingsRepository.isAiRateLimitReached()) {
-        importJobRepository.markPaused(jobId);
+      if (await settingsRepository.isAiRateLimitReached()) {
+        await importJobRepository.markPaused(jobId);
         return err(
           `AI daily rate limit reached after ${totalExtracted} questions. Job paused — resume tomorrow.`,
           { totalExtracted, totalSkipped, jobId },
@@ -373,11 +373,11 @@ export const importService = {
       }
 
       const aiResult = await geminiClient.extractQuestions(chunk.text);
-      settingsRepository.incrementAiCallCount();
+      await settingsRepository.incrementAiCallCount();
 
       if (!aiResult.success) {
         for (let p = chunk.startPage; p <= chunk.endPage; p++) allFailedPages.push(p);
-        importJobRepository.updateProgress(jobId, {
+        await importJobRepository.updateProgress(jobId, {
           currentPage: chunk.endPage,
           failedPages: allFailedPages,
           status: "processing",
@@ -385,7 +385,7 @@ export const importService = {
         continue;
       }
 
-      const stageResult = stageQuestionsFromAiResponse(
+      const stageResult = await stageQuestionsFromAiResponse(
         aiResult.data,
         jobId,
         maxQuestionsPerChunk
@@ -394,7 +394,7 @@ export const importService = {
       totalSkipped += stageResult.skipped;
 
       const eta = estimateRemainingSeconds(chunks.length, chunk.chunkIndex);
-      const updatedJob = importJobRepository.updateProgress(jobId, {
+      const updatedJob = await importJobRepository.updateProgress(jobId, {
         currentPage: chunk.endPage,
         extractedQuestions: totalExtracted,
         estimatedRemainingSeconds: eta,
@@ -403,18 +403,18 @@ export const importService = {
       });
 
       if (onProgress && updatedJob) {
-        const progress = importJobRepository.getProgress(jobId);
+        const progress = await importJobRepository.getProgress(jobId);
         if (progress) onProgress(progress);
       }
     }
 
-    importJobRepository.markCompleted(jobId, totalExtracted);
+    await importJobRepository.markCompleted(jobId, totalExtracted);
     return ok({ totalExtracted, totalSkipped });
   },
 
   /** Returns a live progress snapshot for a running import job. */
-  getProgress(jobId: number): Result<ImportJobProgress> {
-    const progress = importJobRepository.getProgress(jobId);
+  async getProgress(jobId: number): Promise<Result<ImportJobProgress>> {
+    const progress = await importJobRepository.getProgress(jobId);
     if (!progress) {
       return err(`Import job #${jobId} not found`, null, "NOT_FOUND");
     }
@@ -422,8 +422,8 @@ export const importService = {
   },
 
   /** Pauses a running import job. */
-  pauseJob(jobId: number): Result<ImportJob> {
-    const job = importJobRepository.findById(jobId);
+  async pauseJob(jobId: number): Promise<Result<ImportJob>> {
+    const job = await importJobRepository.findById(jobId);
     if (!job) return err(`Import job #${jobId} not found`, null, "NOT_FOUND");
     if (job.status !== "processing") {
       return err(
@@ -432,30 +432,30 @@ export const importService = {
         "VALIDATION_ERROR"
       );
     }
-    const updated = importJobRepository.markPaused(jobId);
+    const updated = await importJobRepository.markPaused(jobId);
     if (!updated) return err("Failed to pause job", null, "DATABASE_ERROR");
     return ok(updated);
   },
 
   /** Returns all import jobs for the dashboard. */
-  listJobs() {
-    return importJobRepository.findAll();
+  async listJobs() {
+    return await importJobRepository.findAll();
   },
 
   /** Returns summary stats for the import dashboard widget. */
-  getJobStats() {
-    return importJobRepository.getSummaryStats();
+  async getJobStats() {
+    return await importJobRepository.getSummaryStats();
   },
 
   /** Deletes a job and all its staged questions. */
-  deleteJob(jobId: number): Result<true> {
-    const job = importJobRepository.findById(jobId);
+  async deleteJob(jobId: number): Promise<Result<true>> {
+    const job = await importJobRepository.findById(jobId);
     if (!job) return err(`Import job #${jobId} not found`, null, "NOT_FOUND");
     if (job.status === "processing") {
       return err("Cannot delete a running job. Pause it first.", null, "VALIDATION_ERROR");
     }
-    stagedQuestionRepository.deleteByJobId(jobId);
-    importJobRepository.delete(jobId);
+    await stagedQuestionRepository.deleteByJobId(jobId);
+    await importJobRepository.delete(jobId);
     return ok(true);
   },
 } as const;
@@ -466,11 +466,11 @@ export const importService = {
  * Parses + validates Gemini JSON, then inserts valid questions into staged_questions.
  * Used by all three import paths (PDF, image, text) — single staging function.
  */
-function stageQuestionsFromAiResponse(
+async function stageQuestionsFromAiResponse(
   rawJson: string,
   jobId: number,
   maxQuestionsPerChunk: number
-): { inserted: number; skipped: number } {
+): Promise<{ inserted: number; skipped: number }> {
   const parseResult = validationService.parseJson(rawJson);
   if (!parseResult.success) return { inserted: 0, skipped: 0 };
 
@@ -491,7 +491,7 @@ function stageQuestionsFromAiResponse(
     category: q.category,
   }));
 
-  const inserted = stagedQuestionRepository.createMany(stageInputs);
+  const inserted = await stagedQuestionRepository.createMany(stageInputs);
   return { inserted, skipped };
 }
 

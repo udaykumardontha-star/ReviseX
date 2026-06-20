@@ -1,83 +1,53 @@
 /**
  * db/connection.ts
  *
- * Singleton Better SQLite3 connection with Drizzle ORM.
- * This is the ONLY file allowed to instantiate a database connection.
- * All repositories must import `db` from this file — never create their own connections.
- *
- * Architecture: db/ layer is the foundation. Nothing in app/ imports from here directly.
+ * Singleton libSQL connection with Drizzle ORM.
+ * Supports both local sqlite files and Turso Edge URLs.
  */
 
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { createClient, type Client } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 import { resolve } from "path";
 import * as schema from "./schema";
 
-// ─── Resolve database path ────────────────────────────────────────────────────
-// Support both file:// URI format (from Drizzle config) and plain path.
-const rawUrl = process.env["DATABASE_URL"] ?? "sqlite.db";
-const dbPath = rawUrl.startsWith("file:")
-  ? rawUrl.slice(5) // strip "file:" prefix
-  : rawUrl;
+const rawUrl = process.env["DATABASE_URL"] ?? "file:sqlite.db";
 
-const absoluteDbPath = resolve(process.cwd(), dbPath);
+// Parse URL. If it's a local file, ensure it's absolute so it works from anywhere
+let dbUrl = rawUrl;
 
-// ─── Singleton pattern ────────────────────────────────────────────────────────
-// In Next.js dev mode, modules can be hot-reloaded, causing multiple instances.
-// We store the connection on the global object to prevent this.
+if (dbUrl.startsWith("file:")) {
+  const localPath = dbUrl.slice(5); // strip file:
+  dbUrl = "file:" + resolve(process.cwd(), localPath);
+}
+
 declare global {
   // eslint-disable-next-line no-var
-  var __sqliteDb: Database.Database | undefined;
+  var __libsqlClient: Client | undefined;
 }
 
-function createConnection(): Database.Database {
-  const sqlite = new Database(absoluteDbPath, {
-    // verbose: process.env.NODE_ENV === "development" ? console.log : undefined,
-  });
+function createLibsqlClient(): Client {
+  const clientConfig: any = { url: dbUrl };
+  if (process.env.TURSO_AUTH_TOKEN) {
+    clientConfig.authToken = process.env.TURSO_AUTH_TOKEN;
+  }
 
-  // ─── Essential PRAGMAs ───────────────────────────────────────────────────
-  // Enable WAL mode for concurrent read performance
-  sqlite.pragma("journal_mode = WAL");
-  // CRITICAL: Enable foreign key enforcement on every connection
-  sqlite.pragma("foreign_keys = ON");
-  // Increase cache size for better performance (negative = KB, positive = pages)
-  sqlite.pragma("cache_size = -32000"); // 32 MB cache
-  // Enable memory-mapped I/O for faster reads (256 MB)
-  sqlite.pragma("mmap_size = 268435456");
-  // Synchronous = NORMAL is safe with WAL mode and far faster than FULL
-  sqlite.pragma("synchronous = NORMAL");
-  // Enable busy timeout to handle concurrent writes gracefully (5 seconds)
-  sqlite.pragma("busy_timeout = 5000");
-  // Optimize temp_store to memory for faster query processing
-  sqlite.pragma("temp_store = MEMORY");
+  const client = createClient(clientConfig);
 
-  console.log(`[DB] Connected to SQLite at: ${absoluteDbPath}`);
-  return sqlite;
+  console.log(`[DB] Connected to libSQL at: ${dbUrl}`);
+  return client;
 }
 
-// Use global singleton in development to survive HMR
-const sqliteInstance: Database.Database =
-  globalThis.__sqliteDb ?? createConnection();
+const clientInstance: Client = globalThis.__libsqlClient ?? createLibsqlClient();
 
 if (process.env.NODE_ENV !== "production") {
-  globalThis.__sqliteDb = sqliteInstance;
+  globalThis.__libsqlClient = clientInstance;
 }
 
 // ─── Drizzle ORM instance ─────────────────────────────────────────────────────
-export const db = drizzle(sqliteInstance, {
+export const db = drizzle(clientInstance, {
   schema,
   logger: process.env.NODE_ENV === "development",
 });
 
-// ─── Raw SQLite access (for FTS5 and raw SQL migrations) ──────────────────────
-// Repositories may need this for virtual table queries and bulk inserts.
-export const rawSqlite: Database.Database = sqliteInstance;
-
-// ─── Graceful shutdown ────────────────────────────────────────────────────────
-// Ensure the database is properly closed on process exit.
-process.on("exit", () => {
-  if (sqliteInstance.open) {
-    sqliteInstance.close();
-    console.log("[DB] Connection closed gracefully.");
-  }
-});
+// ─── Raw libSQL access (for FTS5 and raw SQL migrations) ──────────────────────
+export const rawSqlite: Client = clientInstance;

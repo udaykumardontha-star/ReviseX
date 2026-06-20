@@ -44,7 +44,7 @@ export type NoteGenerationResult = {
 };
 
 export type NoteListResult = {
-  items: ReturnType<typeof noteRepository.findAll>;
+  items: Awaited<ReturnType<typeof noteRepository.findAll>>;
   total: number;
 };
 
@@ -55,21 +55,21 @@ export const noteService = {
    * Returns an existing note for a topic slug if it exists.
    * Does NOT call Gemini. Used for initial page load (always try this first).
    */
-  getNoteByTopicSlug(slug: string): Result<NoteWithMeta> {
-    const note = noteRepository.findByTopicSlug(slug);
+  async getNoteByTopicSlug(slug: string): Promise<Result<NoteWithMeta>> {
+    const note = await noteRepository.findByTopicSlug(slug);
     if (!note) {
       return err(`No note found for topic "${slug}"`, null, "NOT_FOUND");
     }
 
-    noteRepository.incrementViewed(note.id);
+    await noteRepository.incrementViewed(note.id);
     return ok(note);
   },
 
   /**
    * Returns an existing note by topic ID.
    */
-  getNoteByTopicId(topicId: number): Result<Note> {
-    const note = noteRepository.findByTopicId(topicId);
+  async getNoteByTopicId(topicId: number): Promise<Result<Note>> {
+    const note = await noteRepository.findByTopicId(topicId);
     if (!note) {
       return err(`No note found for topic #${topicId}`, null, "NOT_FOUND");
     }
@@ -86,21 +86,19 @@ export const noteService = {
     topicSlug: string
   ): Promise<Result<NoteGenerationResult>> {
     // 1. Resolve topic
-    const topic = topicRepository.findActiveBySlug(topicSlug);
+    const topic = await topicRepository.findActiveBySlug(topicSlug);
     if (!topic) {
       return err(`Topic "${topicSlug}" not found`, null, "NOT_FOUND");
     }
 
     // 2. ── DATABASE FIRST: return cached note if it exists ────────────────
-    const existingNote = noteRepository.findByTopicId(topic.id);
+    const existingNote = await noteRepository.findByTopicId(topic.id);
     if (existingNote && topic.topicStatus === "generated") {
-      const keywords = noteRepository
-        .getKeywords(existingNote.id)
-        .map((k) => k.keyword);
-      const facts = noteRepository
-        .getFacts(existingNote.id)
-        .map((f) => f.fact);
-      noteRepository.incrementViewed(existingNote.id);
+      const keywordsRaw = await noteRepository.getKeywords(existingNote.id);
+      const keywords = keywordsRaw.map((k) => k.keyword);
+      const factsRaw = await noteRepository.getFacts(existingNote.id);
+      const facts = factsRaw.map((f) => f.fact);
+      await noteRepository.incrementViewed(existingNote.id);
       return ok({
         note: existingNote,
         keywords,
@@ -110,7 +108,7 @@ export const noteService = {
     }
 
     // 3. Check AI rate limit BEFORE calling Gemini
-    if (settingsRepository.isAiRateLimitReached()) {
+    if (await settingsRepository.isAiRateLimitReached()) {
       return err(
         "AI daily limit reached. Notes cannot be generated until tomorrow.",
         null,
@@ -119,7 +117,7 @@ export const noteService = {
     }
 
     // 4. Gather context questions for the prompt (top 10 by times_revised)
-    const contextQs = questionRepository.findByTopicId(topic.id, undefined, 10);
+    const contextQs = await questionRepository.findByTopicId(topic.id, undefined, 10);
     const contextQuestions = contextQs.map((q) => q.question);
 
     // 5. ── AI LAST: call Gemini ───────────────────────────────────────────
@@ -128,7 +126,7 @@ export const noteService = {
       topic.category,
       contextQuestions
     );
-    settingsRepository.incrementAiCallCount();
+    await settingsRepository.incrementAiCallCount();
 
     if (!aiResult.success) {
       return err(
@@ -168,7 +166,7 @@ export const noteService = {
 
     if (existingNote) {
       // Update existing note (captures version snapshot internally)
-      persistedNote = noteRepository.update(existingNote.id, {
+      persistedNote = await noteRepository.update(existingNote.id, {
         content: validated.fullRevisionNote,
         rawAiResponse: aiResult.data,
         generatedFrom: "refresh",
@@ -178,7 +176,7 @@ export const noteService = {
       });
     } else {
       // Create brand-new note
-      persistedNote = noteRepository.create({
+      persistedNote = await noteRepository.create({
         topicId: topic.id,
         content: validated.fullRevisionNote,
         rawAiResponse: aiResult.data,
@@ -194,8 +192,8 @@ export const noteService = {
     }
 
     // 8. Update topic status and counts
-    topicRepository.markGenerated(topic.id);
-    topicRepository.recalculateNoteCounts(topic.id);
+    await topicRepository.markGenerated(topic.id);
+    await topicRepository.recalculateNoteCounts(topic.id);
 
     return ok({
       note: persistedNote,
@@ -212,52 +210,52 @@ export const noteService = {
    * Rate limit is still enforced.
    */
   async refreshNote(topicId: number): Promise<Result<NoteGenerationResult>> {
-    const topic = topicRepository.findById(topicId);
+    const topic = await topicRepository.findById(topicId);
     if (!topic) {
       return err(`Topic #${topicId} not found`, null, "NOT_FOUND");
     }
 
     // Mark as needs_refresh then delegate to generateOrGetNote
-    topicRepository.markNeedsRefresh(topicId);
-    return noteService.generateOrGetNote(topic.slug);
+    await topicRepository.markNeedsRefresh(topicId);
+    return await noteService.generateOrGetNote(topic.slug);
   },
 
   /**
    * Returns all notes with metadata for the /revision page.
    */
-  listNotes(limit: number = 50, offset: number = 0): NoteListResult {
-    const items = noteRepository.findAll(limit, offset);
-    const stats = noteRepository.getStats();
+  async listNotes(limit: number = 50, offset: number = 0): Promise<NoteListResult> {
+    const items = await noteRepository.findAll(limit, offset);
+    const stats = await noteRepository.getStats();
     return { items, total: stats.totalNotes };
   },
 
   /**
    * Returns N random facts for the "Daily Facts" widget.
    */
-  getRandomFacts(count: number = 10) {
-    return noteRepository.getRandomFacts(count);
+  async getRandomFacts(count: number = 10) {
+    return await noteRepository.getRandomFacts(count);
   },
 
   /**
    * Returns version history for a note.
    */
-  getNoteVersions(noteId: number): Result<NoteVersion[]> {
-    const note = noteRepository.findById(noteId);
+  async getNoteVersions(noteId: number): Promise<Result<NoteVersion[]>> {
+    const note = await noteRepository.findById(noteId);
     if (!note) {
       return err(`Note #${noteId} not found`, null, "NOT_FOUND");
     }
-    const versions = noteRepository.getVersions(noteId);
+    const versions = await noteRepository.getVersions(noteId);
     return ok(versions);
   },
 
   /**
    * Restores a specific version of a note.
    */
-  restoreNoteVersion(
+  async restoreNoteVersion(
     noteId: number,
     versionId: number
-  ): Result<Note> {
-    const restored = noteRepository.restoreVersion(noteId, versionId);
+  ): Promise<Result<Note>> {
+    const restored = await noteRepository.restoreVersion(noteId, versionId);
     if (!restored) {
       return err(
         `Could not restore version #${versionId} for note #${noteId}`,
@@ -271,20 +269,20 @@ export const noteService = {
   /**
    * Soft-deletes a note.
    */
-  deleteNote(noteId: number): Result<true> {
-    const note = noteRepository.findById(noteId);
+  async deleteNote(noteId: number): Promise<Result<true>> {
+    const note = await noteRepository.findById(noteId);
     if (!note) return err(`Note #${noteId} not found`, null, "NOT_FOUND");
-    noteRepository.softDelete(noteId);
+    await noteRepository.softDelete(noteId);
     // Reset topic status to not_generated
-    topicRepository.update(note.topicId, { topicStatus: "not_generated" });
-    topicRepository.recalculateNoteCounts(note.topicId);
+    await topicRepository.update(note.topicId, { topicStatus: "not_generated" });
+    await topicRepository.recalculateNoteCounts(note.topicId);
     return ok(true);
   },
 
   /**
    * Returns note stats for the dashboard.
    */
-  getStats() {
-    return noteRepository.getStats();
+  async getStats() {
+    return await noteRepository.getStats();
   },
 } as const;

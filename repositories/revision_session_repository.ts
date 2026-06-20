@@ -44,10 +44,10 @@ export const revisionSessionRepository = {
    * Starts a new revision session for a topic.
    * Multiple sessions for the same topic on the same day are allowed.
    */
-  startSession(input: StartSessionInput): RevisionSession {
+  async startSession(input: StartSessionInput): Promise<RevisionSession> {
     const now = new Date().toISOString();
 
-    return db
+    return await db
       .insert(revisionSessions)
       .values({
         topicId: input.topicId,
@@ -63,10 +63,10 @@ export const revisionSessionRepository = {
    * Marks a revision session as completed.
    * Returns undefined if the session is not found.
    */
-  completeSession(sessionId: number): RevisionSession | undefined {
+  async completeSession(sessionId: number): Promise<RevisionSession | undefined> {
     const now = new Date().toISOString();
 
-    return db
+    return await db
       .update(revisionSessions)
       .set({
         completedAt: now,
@@ -80,8 +80,8 @@ export const revisionSessionRepository = {
   /**
    * Finds a session by ID.
    */
-  findById(id: number): RevisionSession | undefined {
-    return db
+  async findById(id: number): Promise<RevisionSession | undefined> {
+    return await db
       .select()
       .from(revisionSessions)
       .where(eq(revisionSessions.id, id))
@@ -91,8 +91,8 @@ export const revisionSessionRepository = {
   /**
    * Returns all sessions for a topic, newest first.
    */
-  findByTopicId(topicId: number, limit: number = 20): RevisionSession[] {
-    return db
+  async findByTopicId(topicId: number, limit: number = 20): Promise<RevisionSession[]> {
+    return await db
       .select()
       .from(revisionSessions)
       .where(eq(revisionSessions.topicId, topicId))
@@ -105,10 +105,9 @@ export const revisionSessionRepository = {
    * Returns recent sessions with topic metadata joined.
    * Used by the dashboard "Recently Studied" widget.
    */
-  findRecentWithTopic(limit: number = 10): RevisionSessionWithTopic[] {
-    return rawSqlite
-      .prepare(
-        `SELECT
+  async findRecentWithTopic(limit: number = 10): Promise<RevisionSessionWithTopic[]> {
+    const resultObj = await rawSqlite.execute({
+        sql: `SELECT
           rs.*,
           t.name     AS topicName,
           t.slug     AS topicSlug,
@@ -117,19 +116,20 @@ export const revisionSessionRepository = {
         JOIN topics t ON t.id = rs.topic_id
         WHERE t.is_deleted = 0
         ORDER BY rs.started_at DESC
-        LIMIT ?`
-      )
-      .all(limit) as RevisionSessionWithTopic[];
+        LIMIT ?`,
+        args: [limit]
+    });
+    return resultObj.rows as unknown as RevisionSessionWithTopic[];
   },
 
   /**
    * Returns sessions within a date range (for calendar heatmap).
    */
-  findInDateRange(
+  async findInDateRange(
     startDate: string,
     endDate: string
-  ): RevisionSession[] {
-    return db
+  ): Promise<RevisionSession[]> {
+    return await db
       .select()
       .from(revisionSessions)
       .where(
@@ -146,35 +146,35 @@ export const revisionSessionRepository = {
    * Returns per-day activity summary for the last N days.
    * Used to build the activity heatmap on the dashboard.
    */
-  getDailyActivity(daysBack: number = 30): RecentActivity[] {
-    return rawSqlite
-      .prepare(
-        `SELECT
+  async getDailyActivity(daysBack: number = 30): Promise<RecentActivity[]> {
+    const resultObj = await rawSqlite.execute({
+        sql: `SELECT
           strftime('%Y-%m-%d', started_at) AS date,
           COUNT(*) AS sessionCount,
           COUNT(DISTINCT topic_id) AS topicsStudied
         FROM revision_sessions
         WHERE started_at >= date('now', '-' || ? || ' days')
         GROUP BY strftime('%Y-%m-%d', started_at)
-        ORDER BY date ASC`
-      )
-      .all(daysBack) as RecentActivity[];
+        ORDER BY date ASC`,
+        args: [daysBack]
+    });
+    return resultObj.rows as unknown as RecentActivity[];
   },
 
   /**
    * Calculates the user's study streak and total session stats.
    */
-  getStreakStats(): DailyStreak {
+  async getStreakStats(): Promise<DailyStreak> {
     const today = new Date().toISOString().slice(0, 10);
 
     // Get distinct dates with study activity, sorted descending
-    const studyDates = rawSqlite
-      .prepare(
-        `SELECT DISTINCT strftime('%Y-%m-%d', started_at) AS date
+    const resultObj = await rawSqlite.execute({
+        sql: `SELECT DISTINCT strftime('%Y-%m-%d', started_at) AS date
          FROM revision_sessions
-         ORDER BY date DESC`
-      )
-      .all() as Array<{ date: string }>;
+         ORDER BY date DESC`,
+         args: []
+    });
+    const studyDates = resultObj.rows as unknown as Array<{ date: string }>;
 
     if (studyDates.length === 0) {
       return {
@@ -220,7 +220,7 @@ export const revisionSessionRepository = {
     longestStreak = Math.max(longestStreak, currentStreak);
 
     // Total sessions
-    const totalResult = db
+    const totalResult = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(revisionSessions)
       .get();
@@ -228,7 +228,7 @@ export const revisionSessionRepository = {
     return {
       currentStreak,
       longestStreak,
-      totalSessions: totalResult?.count ?? 0,
+      totalSessions: Number(totalResult?.count ?? 0),
       lastStudiedAt: lastStudied,
       studiedToday,
     };
@@ -237,21 +237,21 @@ export const revisionSessionRepository = {
   /**
    * Returns the count of unique topics studied (with at least one session).
    */
-  countStudiedTopics(): number {
-    const result = rawSqlite
-      .prepare(
-        `SELECT COUNT(DISTINCT topic_id) as count FROM revision_sessions`
-      )
-      .get() as { count: number };
-    return result?.count ?? 0;
+  async countStudiedTopics(): Promise<number> {
+    const resultObj = await rawSqlite.execute({
+        sql: `SELECT COUNT(DISTINCT topic_id) as count FROM revision_sessions`,
+        args: []
+    });
+    const result = resultObj.rows[0] as unknown as { count: number };
+    return Number(result?.count ?? 0);
   },
 
   /**
    * Deletes all sessions for a topic.
    * Called when a topic is hard-deleted.
    */
-  deleteByTopicId(topicId: number): number {
-    const result = db
+  async deleteByTopicId(topicId: number): Promise<number> {
+    const result = await db
       .delete(revisionSessions)
       .where(eq(revisionSessions.topicId, topicId))
       .returning()

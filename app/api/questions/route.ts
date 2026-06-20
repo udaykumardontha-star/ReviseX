@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   // FTS search if query provided
   if (q && q.trim().length >= 2) {
     const offset = (page - 1) * pageSize;
-    const result = questionService.searchQuestions(q, pageSize, offset);
+    const result = await questionService.searchQuestions(q, pageSize, offset);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ...result.data, page, pageSize });
   }
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   if (topicId) filters.topicId = topicId;
   if (isBookmarked !== undefined) filters.isBookmarked = isBookmarked;
 
-  const result = questionService.listQuestions({ ...filters, page });
+  const result = await questionService.listQuestions({ ...filters, page });
   if (!result.success) return NextResponse.json({ error: result.error }, { status: 500 });
   return NextResponse.json(result.data);
 }

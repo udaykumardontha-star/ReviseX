@@ -13,12 +13,12 @@ export async function POST(
   const action = req.nextUrl.searchParams.get("action") === "reject" ? "reject" : "approve";
 
   if (action === "approve") {
-    const result = stagingService.approveQuestion(id);
+    const result = await stagingService.approveQuestion(id);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 404 });
     return NextResponse.json(result.data);
   } else {
     const body = await req.json().catch(() => ({}) as { note?: string });
-    const result = stagingService.rejectQuestion(id, (body as { note?: string }).note);
+    const result = await stagingService.rejectQuestion(id, (body as { note?: string }).note);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 404 });
     return NextResponse.json(result.data);
   }

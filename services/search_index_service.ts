@@ -75,10 +75,10 @@ export const searchIndexService = {
    * All three FTS indexes are queried — results are never filtered by
    * visiting individual repositories.
    */
-  search(
+  async search(
     rawQuery: string,
     limit: number = 10
-  ): Result<GlobalSearchResult> {
+  ): Promise<Result<GlobalSearchResult>> {
     if (!rawQuery.trim() || rawQuery.trim().length < 2) {
       return err("Search query must be at least 2 characters", null, "VALIDATION_ERROR");
     }
@@ -92,9 +92,8 @@ export const searchIndexService = {
 
     try {
       // 1. Question search
-      const questionResults = rawSqlite
-        .prepare(
-          `SELECT
+      const qRes = await rawSqlite.execute({
+          sql: `SELECT
             q.id,
             q.question AS title,
             snippet(questions_fts, 0, '<mark>', '</mark>', '...', 20) AS snippet,
@@ -105,9 +104,10 @@ export const searchIndexService = {
           WHERE questions_fts MATCH ?
             AND q.is_deleted = 0
           ORDER BY rank
-          LIMIT ?`
-        )
-        .all(ftsQuery, limit) as Array<{
+          LIMIT ?`,
+          args: [ftsQuery, limit]
+      });
+      const questionResults = qRes.rows as unknown as Array<{
           id: number;
           title: string;
           snippet: string;
@@ -116,9 +116,8 @@ export const searchIndexService = {
         }>;
 
       // 2. Topic search
-      const topicResults = rawSqlite
-        .prepare(
-          `SELECT
+      const tRes = await rawSqlite.execute({
+          sql: `SELECT
             t.id,
             t.name AS title,
             snippet(topics_fts, 0, '<mark>', '</mark>', '...', 20) AS snippet,
@@ -130,9 +129,10 @@ export const searchIndexService = {
           WHERE topics_fts MATCH ?
             AND t.is_deleted = 0
           ORDER BY rank
-          LIMIT ?`
-        )
-        .all(ftsQuery, limit) as Array<{
+          LIMIT ?`,
+          args: [ftsQuery, limit]
+      });
+      const topicResults = tRes.rows as unknown as Array<{
           id: number;
           title: string;
           snippet: string;
@@ -142,9 +142,8 @@ export const searchIndexService = {
         }>;
 
       // 3. Notes search (via keywords FTS)
-      const noteResults = rawSqlite
-        .prepare(
-          `SELECT
+      const nRes = await rawSqlite.execute({
+          sql: `SELECT
             t.id,
             t.name AS title,
             snippet(notes_fts, 0, '<mark>', '</mark>', '...', 20) AS snippet,
@@ -158,9 +157,10 @@ export const searchIndexService = {
             AND n.is_deleted = 0
             AND t.is_deleted = 0
           ORDER BY rank
-          LIMIT ?`
-        )
-        .all(ftsQuery, limit) as Array<{
+          LIMIT ?`,
+          args: [ftsQuery, limit]
+      });
+      const noteResults = nRes.rows as unknown as Array<{
           id: number;
           title: string;
           snippet: string;
@@ -170,32 +170,32 @@ export const searchIndexService = {
         }>;
 
       const questions: SearchResultItem[] = questionResults.map((r) => ({
-        id: r.id,
+        id: Number(r.id),
         type: "question",
-        title: r.title,
-        snippet: r.snippet,
-        category: r.category,
-        rank: r.rank,
+        title: String(r.title),
+        snippet: String(r.snippet),
+        category: String(r.category),
+        rank: Number(r.rank),
       }));
 
       const topics: SearchResultItem[] = topicResults.map((r) => ({
-        id: r.id,
+        id: Number(r.id),
         type: "topic",
-        title: r.title,
-        snippet: r.snippet,
-        category: r.category,
-        slug: r.slug,
-        rank: r.rank,
+        title: String(r.title),
+        snippet: String(r.snippet),
+        category: String(r.category),
+        slug: String(r.slug),
+        rank: Number(r.rank),
       }));
 
       const notes: SearchResultItem[] = noteResults.map((r) => ({
-        id: r.id,
+        id: Number(r.id),
         type: "note",
-        title: r.title,
-        snippet: r.snippet,
-        category: r.category,
-        slug: r.slug,
-        rank: r.rank,
+        title: String(r.title),
+        snippet: String(r.snippet),
+        category: String(r.category),
+        slug: String(r.slug),
+        rank: Number(r.rank),
       }));
 
       return ok({
@@ -216,29 +216,26 @@ export const searchIndexService = {
    * Use when FTS content drifts from the live questions table.
    * Executes in a single SQLite transaction.
    */
-  rebuildQuestionsIndex(): Result<FtsRebuildResult> {
+  async rebuildQuestionsIndex(): Promise<Result<FtsRebuildResult>> {
     const t0 = Date.now();
     try {
-      rawSqlite.exec(`
-        BEGIN;
-        DELETE FROM questions_fts;
+      await rawSqlite.execute("BEGIN;");
+      await rawSqlite.execute("DELETE FROM questions_fts;");
+      await rawSqlite.execute(`
         INSERT INTO questions_fts(rowid, question_text, topic_name, category, difficulty)
           SELECT q.id, q.question, t.name, q.category, q.difficulty
           FROM questions q
           JOIN topics t ON t.id = q.topic_id
           WHERE q.is_deleted = 0;
-        COMMIT;
       `);
+      await rawSqlite.execute("COMMIT;");
 
-      const count = (
-        rawSqlite.prepare("SELECT COUNT(*) as c FROM questions_fts").get() as {
-          c: number;
-        }
-      ).c;
+      const countRes = await rawSqlite.execute("SELECT COUNT(*) as c FROM questions_fts");
+      const count = Number(countRes.rows[0]?.c ?? 0);
 
       return ok({ table: "questions_fts", rowsIndexed: count, durationMs: Date.now() - t0 });
     } catch (e) {
-      try { rawSqlite.exec("ROLLBACK;"); } catch {}
+      try { await rawSqlite.execute("ROLLBACK;"); } catch {}
       return err(`questions_fts rebuild failed: ${String(e)}`, e, "DATABASE_ERROR");
     }
   },
@@ -246,26 +243,23 @@ export const searchIndexService = {
   /**
    * Rebuilds the topics_fts index from scratch.
    */
-  rebuildTopicsIndex(): Result<FtsRebuildResult> {
+  async rebuildTopicsIndex(): Promise<Result<FtsRebuildResult>> {
     const t0 = Date.now();
     try {
-      rawSqlite.exec(`
-        BEGIN;
-        DELETE FROM topics_fts;
+      await rawSqlite.execute("BEGIN;");
+      await rawSqlite.execute("DELETE FROM topics_fts;");
+      await rawSqlite.execute(`
         INSERT INTO topics_fts(rowid, name, category)
           SELECT id, name, category FROM topics WHERE is_deleted = 0;
-        COMMIT;
       `);
+      await rawSqlite.execute("COMMIT;");
 
-      const count = (
-        rawSqlite.prepare("SELECT COUNT(*) as c FROM topics_fts").get() as {
-          c: number;
-        }
-      ).c;
+      const countRes = await rawSqlite.execute("SELECT COUNT(*) as c FROM topics_fts");
+      const count = Number(countRes.rows[0]?.c ?? 0);
 
       return ok({ table: "topics_fts", rowsIndexed: count, durationMs: Date.now() - t0 });
     } catch (e) {
-      try { rawSqlite.exec("ROLLBACK;"); } catch {}
+      try { await rawSqlite.execute("ROLLBACK;"); } catch {}
       return err(`topics_fts rebuild failed: ${String(e)}`, e, "DATABASE_ERROR");
     }
   },
@@ -273,29 +267,26 @@ export const searchIndexService = {
   /**
    * Rebuilds the notes_fts index from scratch.
    */
-  rebuildNotesIndex(): Result<FtsRebuildResult> {
+  async rebuildNotesIndex(): Promise<Result<FtsRebuildResult>> {
     const t0 = Date.now();
     try {
-      rawSqlite.exec(`
-        BEGIN;
-        DELETE FROM notes_fts;
+      await rawSqlite.execute("BEGIN;");
+      await rawSqlite.execute("DELETE FROM notes_fts;");
+      await rawSqlite.execute(`
         INSERT INTO notes_fts(rowid, content, topic_name)
           SELECT n.id, n.content, t.name
           FROM notes n
           JOIN topics t ON t.id = n.topic_id
           WHERE n.is_deleted = 0 AND t.is_deleted = 0;
-        COMMIT;
       `);
+      await rawSqlite.execute("COMMIT;");
 
-      const count = (
-        rawSqlite.prepare("SELECT COUNT(*) as c FROM notes_fts").get() as {
-          c: number;
-        }
-      ).c;
+      const countRes = await rawSqlite.execute("SELECT COUNT(*) as c FROM notes_fts");
+      const count = Number(countRes.rows[0]?.c ?? 0);
 
       return ok({ table: "notes_fts", rowsIndexed: count, durationMs: Date.now() - t0 });
     } catch (e) {
-      try { rawSqlite.exec("ROLLBACK;"); } catch {}
+      try { await rawSqlite.execute("ROLLBACK;"); } catch {}
       return err(`notes_fts rebuild failed: ${String(e)}`, e, "DATABASE_ERROR");
     }
   },
@@ -304,18 +295,18 @@ export const searchIndexService = {
    * Rebuilds ALL FTS5 indexes in sequence.
    * Called from /api/admin/rebuild-index endpoint.
    */
-  rebuildAll(): Result<FtsRebuildResult[]> {
+  async rebuildAll(): Promise<Result<FtsRebuildResult[]>> {
     const results: FtsRebuildResult[] = [];
 
-    const q = searchIndexService.rebuildQuestionsIndex();
+    const q = await searchIndexService.rebuildQuestionsIndex();
     if (!q.success) return err(q.error, q.cause, q.code);
     results.push(q.data);
 
-    const t = searchIndexService.rebuildTopicsIndex();
+    const t = await searchIndexService.rebuildTopicsIndex();
     if (!t.success) return err(t.error, t.cause, t.code);
     results.push(t.data);
 
-    const n = searchIndexService.rebuildNotesIndex();
+    const n = await searchIndexService.rebuildNotesIndex();
     if (!n.success) return err(n.error, n.cause, n.code);
     results.push(n.data);
 
@@ -327,14 +318,12 @@ export const searchIndexService = {
    * Compacts the index segments for better query performance.
    * Should be run periodically (e.g., nightly via /api/admin/optimize).
    */
-  optimizeAll(): Result<true> {
+  async optimizeAll(): Promise<Result<true>> {
     try {
-      rawSqlite.exec(`
-        INSERT INTO questions_fts(questions_fts) VALUES('optimize');
-        INSERT INTO topics_fts(topics_fts) VALUES('optimize');
-        INSERT INTO notes_fts(notes_fts) VALUES('optimize');
-        INSERT INTO note_keywords_fts(note_keywords_fts) VALUES('optimize');
-      `);
+      await rawSqlite.execute("INSERT INTO questions_fts(questions_fts) VALUES('optimize');");
+      await rawSqlite.execute("INSERT INTO topics_fts(topics_fts) VALUES('optimize');");
+      await rawSqlite.execute("INSERT INTO notes_fts(notes_fts) VALUES('optimize');");
+      await rawSqlite.execute("INSERT INTO note_keywords_fts(note_keywords_fts) VALUES('optimize');");
       return ok(true);
     } catch (e) {
       return err(`FTS5 optimize failed: ${String(e)}`, e, "DATABASE_ERROR");
@@ -345,16 +334,13 @@ export const searchIndexService = {
    * Runs FTS5 integrity-check on all virtual tables.
    * Returns a list of error strings (empty array = healthy).
    */
-  integrityCheck(): Result<string[]> {
+  async integrityCheck(): Promise<Result<string[]>> {
     const errors: string[] = [];
     const tables = ["questions_fts", "topics_fts", "notes_fts", "note_keywords_fts"];
 
     try {
       for (const table of tables) {
-        const rows = rawSqlite
-          .prepare(`INSERT INTO ${table}(${table}) VALUES('integrity-check')`)
-          .run();
-        void rows;
+        await rawSqlite.execute(`INSERT INTO ${table}(${table}) VALUES('integrity-check')`);
       }
       return ok(errors);
     } catch (e) {

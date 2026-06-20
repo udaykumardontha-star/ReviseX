@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { searchIndexService } from "@/services";
 
 export async function POST() {
-  const result = searchIndexService.rebuildAll();
+  const result = await searchIndexService.rebuildAll();
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }

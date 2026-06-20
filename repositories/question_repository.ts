@@ -80,13 +80,13 @@ export const questionRepository = {
    * Inserts a single approved question into the question bank.
    * Returns undefined if a question with the same hash already exists.
    */
-  create(input: CreateQuestionInput): Question | undefined {
-    const existing = questionRepository.findByHash(input.questionHash);
+  async create(input: CreateQuestionInput): Promise<Question | undefined> {
+    const existing = await questionRepository.findByHash(input.questionHash);
     if (existing) return undefined;
 
     const now = new Date().toISOString();
 
-    return db
+    return await db
       .insert(questions)
       .values({
         questionHash: input.questionHash,
@@ -118,19 +118,19 @@ export const questionRepository = {
    * Skips any question whose hash already exists.
    * Returns { inserted, skipped } counts.
    */
-  createMany(
+  async createMany(
     inputs: CreateQuestionInput[]
-  ): { inserted: number; skipped: number } {
+  ): Promise<{ inserted: number; skipped: number }> {
     if (inputs.length === 0) return { inserted: 0, skipped: 0 };
 
     let inserted = 0;
     let skipped = 0;
     const now = new Date().toISOString();
 
-    return db.transaction(() => {
+    return await db.transaction(async (tx) => {
       for (const input of inputs) {
         try {
-          const result = db
+          const result = await tx
             .insert(questions)
             .values({
               questionHash: input.questionHash,
@@ -176,8 +176,8 @@ export const questionRepository = {
    * Finds a question by its SHA-256 content hash.
    * Primary deduplication check before any insert.
    */
-  findByHash(hash: string): Question | undefined {
-    return db
+  async findByHash(hash: string): Promise<Question | undefined> {
+    return await db
       .select()
       .from(questions)
       .where(eq(questions.questionHash, hash))
@@ -187,8 +187,8 @@ export const questionRepository = {
   /**
    * Finds a question by primary key.
    */
-  findById(id: number): Question | undefined {
-    return db
+  async findById(id: number): Promise<Question | undefined> {
+    return await db
       .select()
       .from(questions)
       .where(and(eq(questions.id, id), eq(questions.isDeleted, false)))
@@ -199,10 +199,9 @@ export const questionRepository = {
    * Returns a question with its topic name and source name joined.
    * Used for single question display (MCQ card).
    */
-  findByIdWithTopic(id: number): QuestionWithTopic | undefined {
-    const result = rawSqlite
-      .prepare(
-        `SELECT
+  async findByIdWithTopic(id: number): Promise<QuestionWithTopic | undefined> {
+    const resultObj = await rawSqlite.execute({
+      sql: `SELECT
           q.*,
           t.name  AS topicName,
           t.slug  AS topicSlug,
@@ -213,9 +212,11 @@ export const questionRepository = {
         JOIN sources s ON s.id = q.source_id
         LEFT JOIN question_bookmarks qb ON qb.question_id = q.id
         WHERE q.id = ? AND q.is_deleted = 0
-        LIMIT 1`
-      )
-      .get(id) as
+        LIMIT 1`,
+      args: [id]
+    });
+    
+    const result = resultObj.rows[0] as unknown as
       | (Question & {
           topicName: string;
           topicSlug: string;
@@ -246,10 +247,10 @@ export const questionRepository = {
    * Returns a paginated list of questions with optional filters.
    * Includes topic name and bookmark status via raw SQL join.
    */
-  findAll(options: QuestionFilterOptions = {}): {
+  async findAll(options: QuestionFilterOptions = {}): Promise<{
     items: QuestionWithTopic[];
     total: number;
-  } {
+  }> {
     const {
       topicId,
       sourceId,
@@ -293,9 +294,8 @@ export const questionRepository = {
       WHERE ${whereSQL}
     `;
 
-    const items = rawSqlite
-      .prepare(
-        `SELECT
+    const itemsResult = await rawSqlite.execute({
+        sql: `SELECT
           q.*,
           t.name AS topicName,
           t.slug AS topicSlug,
@@ -303,9 +303,11 @@ export const questionRepository = {
           CASE WHEN qb.id IS NOT NULL THEN 1 ELSE 0 END AS isBookmarked
         ${baseQuery}
         ORDER BY q.created_at DESC
-        LIMIT ? OFFSET ?`
-      )
-      .all(...params, limit, offset) as Array<
+        LIMIT ? OFFSET ?`,
+        args: [...params, limit, offset]
+    });
+    
+    const items = itemsResult.rows as unknown as Array<
       Question & {
         topicName: string;
         topicSlug: string;
@@ -314,9 +316,10 @@ export const questionRepository = {
       }
     >;
 
-    const countResult = rawSqlite
-      .prepare(`SELECT COUNT(*) as count ${baseQuery}`)
-      .get(...params) as { count: number };
+    const countResult = await rawSqlite.execute({
+        sql: `SELECT COUNT(*) as count ${baseQuery}`,
+        args: params
+    });
 
     return {
       items: items.map((r) => ({
@@ -331,7 +334,7 @@ export const questionRepository = {
         timesRevised: (r as any).times_revised ?? r.timesRevised,
         isBookmarked: Boolean(r.isBookmarked),
       })),
-      total: countResult?.count ?? 0,
+      total: Number((countResult.rows[0] as any)?.count ?? 0),
     };
   },
 
@@ -339,11 +342,11 @@ export const questionRepository = {
    * Returns questions for a topic (used in the "More from this topic" section).
    * Excludes a specific question ID to avoid showing the current one.
    */
-  findByTopicId(
+  async findByTopicId(
     topicId: number,
     excludeId?: number,
     limit: number = 5
-  ): Question[] {
+  ): Promise<Question[]> {
     const conditions = [
       eq(questions.topicId, topicId),
       eq(questions.isDeleted, false),
@@ -352,7 +355,7 @@ export const questionRepository = {
       conditions.push(ne(questions.id, excludeId));
     }
 
-    return db
+    return await db
       .select()
       .from(questions)
       .where(and(...conditions))
@@ -368,11 +371,11 @@ export const questionRepository = {
    * Returns results sorted by relevance (rank).
    * Falls back to empty array on FTS error.
    */
-  ftsSearch(
+  async ftsSearch(
     query: string,
     limit: number = 20,
     offset: number = 0
-  ): FtsSearchResult[] {
+  ): Promise<FtsSearchResult[]> {
     if (!query.trim()) return [];
 
     // FTS5 query: escape special characters and add wildcard suffix
@@ -385,24 +388,23 @@ export const questionRepository = {
       .join(" ");
 
     try {
-      const results = rawSqlite
-        .prepare(
-          `SELECT
+      const resultsObj = await rawSqlite.execute({
+          sql: `SELECT
             q.id,
             q.question,
             q.category,
-            qf.topic_name,
+            qf.topic_name as topicName,
             rank
           FROM questions_fts qf
           JOIN questions q ON q.id = qf.rowid
           WHERE questions_fts MATCH ?
             AND q.is_deleted = 0
           ORDER BY rank
-          LIMIT ? OFFSET ?`
-        )
-        .all(ftsQuery, limit, offset) as FtsSearchResult[];
+          LIMIT ? OFFSET ?`,
+          args: [ftsQuery, limit, offset]
+      });
 
-      return results;
+      return resultsObj.rows as unknown as FtsSearchResult[];
     } catch {
       return [];
     }
@@ -411,7 +413,7 @@ export const questionRepository = {
   /**
    * Returns total count of matching FTS results (for pagination).
    */
-  ftsSearchCount(query: string): number {
+  async ftsSearchCount(query: string): Promise<number> {
     if (!query.trim()) return 0;
 
     const ftsQuery = query
@@ -423,17 +425,16 @@ export const questionRepository = {
       .join(" ");
 
     try {
-      const result = rawSqlite
-        .prepare(
-          `SELECT COUNT(*) as count
+      const resultObj = await rawSqlite.execute({
+          sql: `SELECT COUNT(*) as count
            FROM questions_fts qf
            JOIN questions q ON q.id = qf.rowid
            WHERE questions_fts MATCH ?
-             AND q.is_deleted = 0`
-        )
-        .get(ftsQuery) as { count: number };
+             AND q.is_deleted = 0`,
+          args: [ftsQuery]
+      });
 
-      return result?.count ?? 0;
+      return Number((resultObj.rows[0] as any)?.count ?? 0);
     } catch {
       return 0;
     }
@@ -444,8 +445,8 @@ export const questionRepository = {
   /**
    * Adds a bookmark for a question. Ignores if already bookmarked.
    */
-  bookmark(questionId: number): QuestionBookmark | undefined {
-    const existing = db
+  async bookmark(questionId: number): Promise<QuestionBookmark | undefined> {
+    const existing = await db
       .select()
       .from(questionBookmarks)
       .where(eq(questionBookmarks.questionId, questionId))
@@ -453,7 +454,7 @@ export const questionRepository = {
 
     if (existing) return existing;
 
-    return db
+    return await db
       .insert(questionBookmarks)
       .values({
         questionId,
@@ -466,8 +467,8 @@ export const questionRepository = {
   /**
    * Removes a bookmark. Returns true if a bookmark was deleted.
    */
-  unbookmark(questionId: number): boolean {
-    const result = db
+  async unbookmark(questionId: number): Promise<boolean> {
+    const result = await db
       .delete(questionBookmarks)
       .where(eq(questionBookmarks.questionId, questionId))
       .returning()
@@ -478,8 +479,8 @@ export const questionRepository = {
   /**
    * Checks if a question is bookmarked.
    */
-  isBookmarked(questionId: number): boolean {
-    const result = db
+  async isBookmarked(questionId: number): Promise<boolean> {
+    const result = await db
       .select({ id: questionBookmarks.id })
       .from(questionBookmarks)
       .where(eq(questionBookmarks.questionId, questionId))
@@ -490,13 +491,13 @@ export const questionRepository = {
   /**
    * Returns all bookmarked question IDs.
    */
-  getBookmarkedIds(): number[] {
-    return db
+  async getBookmarkedIds(): Promise<number[]> {
+    const results = await db
       .select({ questionId: questionBookmarks.questionId })
       .from(questionBookmarks)
       .orderBy(desc(questionBookmarks.createdAt))
-      .all()
-      .map((r) => r.questionId);
+      .all();
+    return results.map((r) => r.questionId);
   },
 
   // ─── Flags ────────────────────────────────────────────────────────────────
@@ -504,10 +505,10 @@ export const questionRepository = {
   /**
    * Flags a question with a reason.
    */
-  flag(input: QuestionFlagInput): QuestionFlag {
+  async flag(input: QuestionFlagInput): Promise<QuestionFlag> {
     const now = new Date().toISOString();
 
-    return db
+    return await db
       .insert(questionFlags)
       .values({
         questionId: input.questionId,
@@ -524,8 +525,8 @@ export const questionRepository = {
   /**
    * Returns all unresolved flags for a question.
    */
-  getFlags(questionId: number): QuestionFlag[] {
-    return db
+  async getFlags(questionId: number): Promise<QuestionFlag[]> {
+    return await db
       .select()
       .from(questionFlags)
       .where(
@@ -541,8 +542,8 @@ export const questionRepository = {
   /**
    * Marks a flag as resolved.
    */
-  resolveFlag(flagId: number): QuestionFlag | undefined {
-    return db
+  async resolveFlag(flagId: number): Promise<QuestionFlag | undefined> {
+    return await db
       .update(questionFlags)
       .set({ resolved: true, updatedAt: new Date().toISOString() })
       .where(eq(questionFlags.id, flagId))
@@ -554,8 +555,8 @@ export const questionRepository = {
    * Returns all unresolved flags across all questions.
    * Used in the /settings admin view.
    */
-  getAllUnresolvedFlags(): QuestionFlag[] {
-    return db
+  async getAllUnresolvedFlags(): Promise<QuestionFlag[]> {
+    return await db
       .select()
       .from(questionFlags)
       .where(eq(questionFlags.resolved, false))
@@ -569,8 +570,8 @@ export const questionRepository = {
    * Increments times_viewed and updates last_viewed_at.
    * Fire-and-forget — no returning() for performance.
    */
-  incrementViewed(id: number): void {
-    db.update(questions)
+  async incrementViewed(id: number): Promise<void> {
+    await db.update(questions)
       .set({
         timesViewed: sql`${questions.timesViewed} + 1`,
         lastViewedAt: new Date().toISOString(),
@@ -583,8 +584,8 @@ export const questionRepository = {
   /**
    * Increments times_revised.
    */
-  incrementRevised(id: number): void {
-    db.update(questions)
+  async incrementRevised(id: number): Promise<void> {
+    await db.update(questions)
       .set({
         timesRevised: sql`${questions.timesRevised} + 1`,
         updatedAt: new Date().toISOString(),
@@ -599,8 +600,8 @@ export const questionRepository = {
    * Soft-deletes a question (sets is_deleted = true).
    * Triggers on the DB automatically update topic and source counters.
    */
-  softDelete(id: number): Question | undefined {
-    return db
+  async softDelete(id: number): Promise<Question | undefined> {
+    return await db
       .update(questions)
       .set({ isDeleted: true, updatedAt: new Date().toISOString() })
       .where(eq(questions.id, id))
@@ -611,8 +612,8 @@ export const questionRepository = {
   /**
    * Restores a soft-deleted question.
    */
-  restore(id: number): Question | undefined {
-    return db
+  async restore(id: number): Promise<Question | undefined> {
+    return await db
       .update(questions)
       .set({ isDeleted: false, updatedAt: new Date().toISOString() })
       .where(eq(questions.id, id))
@@ -623,8 +624,8 @@ export const questionRepository = {
   /**
    * Hard-deletes a question by ID (admin only, irreversible).
    */
-  hardDelete(id: number): boolean {
-    const result = db
+  async hardDelete(id: number): Promise<boolean> {
+    const result = await db
       .delete(questions)
       .where(eq(questions.id, id))
       .returning()
@@ -635,8 +636,8 @@ export const questionRepository = {
   /**
    * Returns soft-deleted questions for the trash view.
    */
-  findDeleted(limit: number = 100): Question[] {
-    return db
+  async findDeleted(limit: number = 100): Promise<Question[]> {
+    return await db
       .select()
       .from(questions)
       .where(eq(questions.isDeleted, true))
@@ -650,20 +651,20 @@ export const questionRepository = {
   /**
    * Returns aggregate question bank stats for the dashboard.
    */
-  getStats(): {
+  async getStats(): Promise<{
     total: number;
     byCategory: Array<{ category: string; count: number }>;
     byDifficulty: Array<{ difficulty: string; count: number }>;
     bookmarked: number;
     flagged: number;
-  } {
-    const total = db
+  }> {
+    const total = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(questions)
       .where(eq(questions.isDeleted, false))
       .get();
 
-    const byCategory = db
+    const byCategory = await db
       .select({
         category: questions.category,
         count: sql<number>`COUNT(*)`,
@@ -674,7 +675,7 @@ export const questionRepository = {
       .orderBy(desc(sql`COUNT(*)`))
       .all();
 
-    const byDifficulty = db
+    const byDifficulty = await db
       .select({
         difficulty: questions.difficulty,
         count: sql<number>`COUNT(*)`,
@@ -684,41 +685,41 @@ export const questionRepository = {
       .groupBy(questions.difficulty)
       .all();
 
-    const bookmarked = db
+    const bookmarked = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(questionBookmarks)
       .get();
 
-    const flagged = db
+    const flagged = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(questionFlags)
       .where(eq(questionFlags.resolved, false))
       .get();
 
     return {
-      total: total?.count ?? 0,
+      total: Number(total?.count ?? 0),
       byCategory: byCategory.map((r) => ({
         category: r.category,
-        count: r.count,
+        count: Number(r.count),
       })),
       byDifficulty: byDifficulty.map((r) => ({
         difficulty: r.difficulty,
-        count: r.count,
+        count: Number(r.count),
       })),
-      bookmarked: bookmarked?.count ?? 0,
-      flagged: flagged?.count ?? 0,
+      bookmarked: Number(bookmarked?.count ?? 0),
+      flagged: Number(flagged?.count ?? 0),
     };
   },
 
   /**
    * Returns the total count of non-deleted questions.
    */
-  count(): number {
-    const result = db
+  async count(): Promise<number> {
+    const result = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(questions)
       .where(eq(questions.isDeleted, false))
       .get();
-    return result?.count ?? 0;
+    return Number(result?.count ?? 0);
   },
 } as const;

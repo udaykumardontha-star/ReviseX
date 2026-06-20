@@ -54,14 +54,14 @@ export const importJobRepository = {
    * Creates a new import job in 'queued' status.
    * Returns undefined if a job with the same file_hash already exists.
    */
-  create(input: CreateImportJobInput): ImportJob | undefined {
+  async create(input: CreateImportJobInput): Promise<ImportJob | undefined> {
     // Check for duplicate by file hash first
-    const existing = importJobRepository.findByHash(input.fileHash);
+    const existing = await importJobRepository.findByHash(input.fileHash);
     if (existing) return undefined;
 
     const now = new Date().toISOString();
 
-    return db
+    return await db
       .insert(importJobs)
       .values({
         fileName: input.fileName,
@@ -84,8 +84,8 @@ export const importJobRepository = {
    * Finds an import job by its SHA-256 file hash.
    * Used to detect and reject duplicate uploads.
    */
-  findByHash(fileHash: string): ImportJob | undefined {
-    return db
+  async findByHash(fileHash: string): Promise<ImportJob | undefined> {
+    return await db
       .select()
       .from(importJobs)
       .where(eq(importJobs.fileHash, fileHash))
@@ -95,15 +95,15 @@ export const importJobRepository = {
   /**
    * Finds an import job by primary key.
    */
-  findById(id: number): ImportJob | undefined {
-    return db.select().from(importJobs).where(eq(importJobs.id, id)).get();
+  async findById(id: number): Promise<ImportJob | undefined> {
+    return await db.select().from(importJobs).where(eq(importJobs.id, id)).get();
   },
 
   /**
    * Returns all jobs for a given source, newest first.
    */
-  findBySourceId(sourceId: number): ImportJob[] {
-    return db
+  async findBySourceId(sourceId: number): Promise<ImportJob[]> {
+    return await db
       .select()
       .from(importJobs)
       .where(eq(importJobs.sourceId, sourceId))
@@ -115,8 +115,8 @@ export const importJobRepository = {
    * Returns all import jobs ordered by creation date descending.
    * Used by the /imports UI for the queue overview.
    */
-  findAll(): ImportJob[] {
-    return db
+  async findAll(): Promise<ImportJob[]> {
+    return await db
       .select()
       .from(importJobs)
       .orderBy(desc(importJobs.createdAt))
@@ -126,8 +126,8 @@ export const importJobRepository = {
   /**
    * Returns all jobs with a specific status.
    */
-  findByStatus(status: ImportJobStatus): ImportJob[] {
-    return db
+  async findByStatus(status: ImportJobStatus): Promise<ImportJob[]> {
+    return await db
       .select()
       .from(importJobs)
       .where(eq(importJobs.status, status))
@@ -139,8 +139,8 @@ export const importJobRepository = {
    * Returns jobs that can be resumed: status is 'processing' or 'paused'.
    * Used by the background queue on server startup.
    */
-  findResumable(): ImportJob[] {
-    return db
+  async findResumable(): Promise<ImportJob[]> {
+    return await db
       .select()
       .from(importJobs)
       .where(
@@ -155,8 +155,8 @@ export const importJobRepository = {
    * Merges new failed pages into the existing failed_pages_json list.
    * Atomically updates current_page, extracted count, and ETA.
    */
-  updateProgress(id: number, update: ImportJobUpdate): ImportJob | undefined {
-    const existing = importJobRepository.findById(id);
+  async updateProgress(id: number, update: ImportJobUpdate): Promise<ImportJob | undefined> {
+    const existing = await importJobRepository.findById(id);
     if (!existing) return undefined;
 
     const existingFailed: number[] = JSON.parse(
@@ -170,7 +170,7 @@ export const importJobRepository = {
           )
         : existingFailed;
 
-    return db
+    return await db
       .update(importJobs)
       .set({
         ...(update.currentPage !== undefined && {
@@ -194,11 +194,11 @@ export const importJobRepository = {
   /**
    * Marks a job as completed with final stats.
    */
-  markCompleted(
+  async markCompleted(
     id: number,
     finalExtractedCount: number
-  ): ImportJob | undefined {
-    return db
+  ): Promise<ImportJob | undefined> {
+    return await db
       .update(importJobs)
       .set({
         status: "completed",
@@ -214,8 +214,8 @@ export const importJobRepository = {
   /**
    * Marks a job as failed. Does NOT delete it — failed jobs are visible in UI.
    */
-  markFailed(id: number): ImportJob | undefined {
-    return db
+  async markFailed(id: number): Promise<ImportJob | undefined> {
+    return await db
       .update(importJobs)
       .set({
         status: "failed",
@@ -229,8 +229,8 @@ export const importJobRepository = {
   /**
    * Marks a job as paused (user-initiated or server shutdown).
    */
-  markPaused(id: number): ImportJob | undefined {
-    return db
+  async markPaused(id: number): Promise<ImportJob | undefined> {
+    return await db
       .update(importJobs)
       .set({
         status: "paused",
@@ -244,8 +244,8 @@ export const importJobRepository = {
   /**
    * Marks a paused/queued job back to processing.
    */
-  markProcessing(id: number): ImportJob | undefined {
-    return db
+  async markProcessing(id: number): Promise<ImportJob | undefined> {
+    return await db
       .update(importJobs)
       .set({
         status: "processing",
@@ -262,8 +262,8 @@ export const importJobRepository = {
   /**
    * Returns a progress-enriched view of a job with computed fields.
    */
-  getProgress(id: number): ImportJobProgress | undefined {
-    const job = importJobRepository.findById(id);
+  async getProgress(id: number): Promise<ImportJobProgress | undefined> {
+    const job = await importJobRepository.findById(id);
     if (!job) return undefined;
 
     const failedPages: number[] = JSON.parse(job.failedPagesJson) as number[];
@@ -290,7 +290,7 @@ export const importJobRepository = {
    * Returns summary stats for all jobs.
    * Used by dashboard metrics.
    */
-  getSummaryStats(): {
+  async getSummaryStats(): Promise<{
     total: number;
     queued: number;
     processing: number;
@@ -298,8 +298,8 @@ export const importJobRepository = {
     failed: number;
     paused: number;
     totalExtracted: number;
-  } {
-    const result = db
+  }> {
+    const result = await db
       .select({
         total: sql<number>`COUNT(*)`,
         queued: sql<number>`SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END)`,
@@ -313,13 +313,13 @@ export const importJobRepository = {
       .get();
 
     return {
-      total: result?.total ?? 0,
-      queued: result?.queued ?? 0,
-      processing: result?.processing ?? 0,
-      completed: result?.completed ?? 0,
-      failed: result?.failed ?? 0,
-      paused: result?.paused ?? 0,
-      totalExtracted: result?.totalExtracted ?? 0,
+      total: Number(result?.total ?? 0),
+      queued: Number(result?.queued ?? 0),
+      processing: Number(result?.processing ?? 0),
+      completed: Number(result?.completed ?? 0),
+      failed: Number(result?.failed ?? 0),
+      paused: Number(result?.paused ?? 0),
+      totalExtracted: Number(result?.totalExtracted ?? 0),
     };
   },
 
@@ -328,8 +328,8 @@ export const importJobRepository = {
    * Cascades to staged_questions via FK.
    * Returns true if a row was deleted.
    */
-  delete(id: number): boolean {
-    const result = db
+  async delete(id: number): Promise<boolean> {
+    const result = await db
       .delete(importJobs)
       .where(eq(importJobs.id, id))
       .returning()

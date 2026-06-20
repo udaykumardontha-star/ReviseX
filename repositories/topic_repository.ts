@@ -79,14 +79,14 @@ export const topicRepository = {
    * Creates a new topic and optionally registers the name as an alias.
    * Returns undefined if the slug already exists.
    */
-  create(input: CreateTopicInput): Topic | undefined {
+  async create(input: CreateTopicInput): Promise<Topic | undefined> {
     // Check slug uniqueness first
-    const existing = topicRepository.findBySlug(input.slug);
+    const existing = await topicRepository.findBySlug(input.slug);
     if (existing) return undefined;
 
     const now = new Date().toISOString();
 
-    const topic = db
+    const topic = await db
       .insert(topics)
       .values({
         slug: input.slug,
@@ -104,8 +104,10 @@ export const topicRepository = {
       .returning()
       .get();
 
-    // Register the canonical name as an alias for deduplication
-    topicRepository.addAlias(topic.id, input.name.toLowerCase().trim());
+    if (topic) {
+        // Register the canonical name as an alias for deduplication
+        await topicRepository.addAlias(topic.id, input.name.toLowerCase().trim());
+    }
 
     return topic;
   },
@@ -114,16 +116,18 @@ export const topicRepository = {
    * Finds or creates a topic by slug.
    * Used during question ingestion to resolve topic names idempotently.
    */
-  findOrCreate(input: CreateTopicInput): Topic {
-    const existing = topicRepository.findBySlug(input.slug);
+  async findOrCreate(input: CreateTopicInput): Promise<Topic> {
+    const existing = await topicRepository.findBySlug(input.slug);
     if (existing) {
       // If it was soft-deleted, restore it
       if (existing.isDeleted) {
-        return topicRepository.restore(existing.id) ?? existing;
+        const restored = await topicRepository.restore(existing.id);
+        return restored ?? existing;
       }
       return existing;
     }
-    return topicRepository.create(input)!;
+    const created = await topicRepository.create(input);
+    return created!;
   },
 
   // ─── Lookup ──────────────────────────────────────────────────────────────
@@ -131,15 +135,15 @@ export const topicRepository = {
   /**
    * Finds a topic by its URL slug. Includes soft-deleted topics.
    */
-  findBySlug(slug: string): Topic | undefined {
-    return db.select().from(topics).where(eq(topics.slug, slug)).get();
+  async findBySlug(slug: string): Promise<Topic | undefined> {
+    return await db.select().from(topics).where(eq(topics.slug, slug)).get();
   },
 
   /**
    * Finds a topic by its URL slug, excluding soft-deleted.
    */
-  findActiveBySlug(slug: string): Topic | undefined {
-    return db
+  async findActiveBySlug(slug: string): Promise<Topic | undefined> {
+    return await db
       .select()
       .from(topics)
       .where(and(eq(topics.slug, slug), eq(topics.isDeleted, false)))
@@ -149,16 +153,16 @@ export const topicRepository = {
   /**
    * Finds a topic by its primary key.
    */
-  findById(id: number): Topic | undefined {
-    return db.select().from(topics).where(eq(topics.id, id)).get();
+  async findById(id: number): Promise<Topic | undefined> {
+    return await db.select().from(topics).where(eq(topics.id, id)).get();
   },
 
   /**
    * Finds a topic by its exact name (case-insensitive).
    * Returns the first non-deleted match.
    */
-  findByName(name: string): Topic | undefined {
-    return db
+  async findByName(name: string): Promise<Topic | undefined> {
+    return await db
       .select()
       .from(topics)
       .where(
@@ -176,25 +180,24 @@ export const topicRepository = {
    *   2. Alias match (case-insensitive)
    * Returns undefined if no match found.
    */
-  resolveByNameOrAlias(rawName: string): Topic | undefined {
+  async resolveByNameOrAlias(rawName: string): Promise<Topic | undefined> {
     const normalized = rawName.toLowerCase().trim();
 
     // 1. Try exact name match first
-    const byName = topicRepository.findByName(rawName);
+    const byName = await topicRepository.findByName(rawName);
     if (byName) return byName;
 
     // 2. Try alias lookup via raw SQL (JOIN is more efficient here)
-    const result = rawSqlite
-      .prepare(
-        `SELECT t.* FROM topics t
+    const resultObj = await rawSqlite.execute({
+        sql: `SELECT t.* FROM topics t
          JOIN topic_aliases ta ON ta.topic_id = t.id
          WHERE lower(ta.alias) = ?
            AND t.is_deleted = 0
-         LIMIT 1`
-      )
-      .get(normalized) as Topic | undefined;
+         LIMIT 1`,
+         args: [normalized]
+    });
 
-    return result;
+    return resultObj.rows[0] as unknown as Topic | undefined;
   },
 
   // ─── Lists ───────────────────────────────────────────────────────────────
@@ -202,10 +205,10 @@ export const topicRepository = {
   /**
    * Returns a paginated list of non-deleted topics with optional filters.
    */
-  findAll(options: TopicFilterOptions = {}): {
+  async findAll(options: TopicFilterOptions = {}): Promise<{
     items: TopicListItem[];
     total: number;
-  } {
+  }> {
     const { category, status, limit = 50, offset = 0 } = options;
 
     const conditions = [eq(topics.isDeleted, false)];
@@ -219,7 +222,7 @@ export const topicRepository = {
 
     const whereClause = and(...conditions);
 
-    const [items, countResult] = [
+    const [items, countResult] = await Promise.all([
       db
         .select({
           id: topics.id,
@@ -246,17 +249,17 @@ export const topicRepository = {
         .from(topics)
         .where(whereClause)
         .get(),
-    ];
+    ]);
 
-    return { items, total: countResult?.count ?? 0 };
+    return { items, total: Number(countResult?.count ?? 0) };
   },
 
   /**
    * Returns all topics that have `topic_status = 'not_generated'` or
    * `topic_status = 'needs_refresh'` — i.e., they need AI note generation.
    */
-  findNeedingGeneration(): Topic[] {
-    return db
+  async findNeedingGeneration(): Promise<Topic[]> {
+    return await db
       .select()
       .from(topics)
       .where(
@@ -275,10 +278,9 @@ export const topicRepository = {
    * Returns topics with their note status joined.
    * Used for the dashboard metrics display.
    */
-  findWithNoteStatus(limit: number = 20): TopicWithNoteStatus[] {
-    const result = rawSqlite
-      .prepare(
-        `SELECT
+  async findWithNoteStatus(limit: number = 20): Promise<TopicWithNoteStatus[]> {
+    const resultObj = await rawSqlite.execute({
+        sql: `SELECT
           t.*,
           CASE WHEN n.id IS NOT NULL THEN 1 ELSE 0 END as has_note,
           n.id as note_id
@@ -286,14 +288,16 @@ export const topicRepository = {
         LEFT JOIN notes n ON n.topic_id = t.id AND n.is_deleted = 0
         WHERE t.is_deleted = 0
         ORDER BY t.total_questions DESC
-        LIMIT ?`
-      )
-      .all(limit) as Array<Topic & { has_note: number; note_id: number | null }>;
+        LIMIT ?`,
+        args: [limit]
+    });
+    
+    const result = resultObj.rows as unknown as Array<Topic & { has_note: number; note_id: number | null }>;
 
     return result.map((row) => ({
       ...row,
       // Drizzle uses camelCase but rawSqlite returns snake_case
-      topicStatus: row.topicStatus ?? (row as unknown as Record<string, string>)["topic_status"],
+      topicStatus: row.topicStatus ?? (row as unknown as Record<string, string>)["topic_status"] as TopicStatus,
       isDeleted: Boolean(row.isDeleted ?? (row as unknown as Record<string, number>)["is_deleted"]),
       hasNote: Boolean(row.has_note),
       noteId: row.note_id,
@@ -303,8 +307,8 @@ export const topicRepository = {
   /**
    * Returns soft-deleted topics for the trash view.
    */
-  findDeleted(): Topic[] {
-    return db
+  async findDeleted(): Promise<Topic[]> {
+    return await db
       .select()
       .from(topics)
       .where(eq(topics.isDeleted, true))
@@ -316,8 +320,8 @@ export const topicRepository = {
    * Searches topic names using LIKE for quick prefix matching.
    * FTS5 search is handled by search_index_service.
    */
-  searchByName(term: string, limit: number = 10): Topic[] {
-    return db
+  async searchByName(term: string, limit: number = 10): Promise<Topic[]> {
+    return await db
       .select()
       .from(topics)
       .where(
@@ -337,8 +341,8 @@ export const topicRepository = {
    * Updates mutable fields on a topic.
    * Always stamps updatedAt.
    */
-  update(id: number, data: TopicUpdate): Topic | undefined {
-    return db
+  async update(id: number, data: TopicUpdate): Promise<Topic | undefined> {
+    return await db
       .update(topics)
       .set({ ...data, updatedAt: new Date().toISOString() })
       .where(eq(topics.id, id))
@@ -350,8 +354,8 @@ export const topicRepository = {
    * Sets topic_status to 'generated' and stamps last_generated_at.
    * Called after successful AI note generation.
    */
-  markGenerated(id: number): Topic | undefined {
-    return db
+  async markGenerated(id: number): Promise<Topic | undefined> {
+    return await db
       .update(topics)
       .set({
         topicStatus: "generated",
@@ -367,8 +371,8 @@ export const topicRepository = {
    * Sets topic_status to 'needs_refresh'.
    * Called when notes are stale or user clicks "Refresh Topic".
    */
-  markNeedsRefresh(id: number): Topic | undefined {
-    return db
+  async markNeedsRefresh(id: number): Promise<Topic | undefined> {
+    return await db
       .update(topics)
       .set({
         topicStatus: "needs_refresh",
@@ -383,8 +387,8 @@ export const topicRepository = {
    * Increments total_views by 1.
    * Lightweight — no returning() for performance.
    */
-  incrementViews(id: number): void {
-    db.update(topics)
+  async incrementViews(id: number): Promise<void> {
+    await db.update(topics)
       .set({
         totalViews: sql`${topics.totalViews} + 1`,
         updatedAt: new Date().toISOString(),
@@ -397,14 +401,14 @@ export const topicRepository = {
    * Recalculates and updates total_notes and total_facts for a topic.
    * Called after note generation or fact updates.
    */
-  recalculateNoteCounts(topicId: number): void {
-    const noteCount = db
+  async recalculateNoteCounts(topicId: number): Promise<void> {
+    const noteCount = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(notes)
       .where(and(eq(notes.topicId, topicId), eq(notes.isDeleted, false)))
       .get();
 
-    const factCount = db
+    const factCount = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(noteFacts)
       .where(
@@ -414,10 +418,10 @@ export const topicRepository = {
       )
       .get();
 
-    db.update(topics)
+    await db.update(topics)
       .set({
-        totalNotes: noteCount?.count ?? 0,
-        totalFacts: factCount?.count ?? 0,
+        totalNotes: Number(noteCount?.count ?? 0),
+        totalFacts: Number(factCount?.count ?? 0),
         updatedAt: new Date().toISOString(),
       })
       .where(eq(topics.id, topicId))
@@ -430,8 +434,8 @@ export const topicRepository = {
    * Soft-deletes a topic (hides from all UI).
    * Data is preserved — questions and notes remain.
    */
-  softDelete(id: number): Topic | undefined {
-    return db
+  async softDelete(id: number): Promise<Topic | undefined> {
+    return await db
       .update(topics)
       .set({ isDeleted: true, updatedAt: new Date().toISOString() })
       .where(eq(topics.id, id))
@@ -442,8 +446,8 @@ export const topicRepository = {
   /**
    * Restores a soft-deleted topic.
    */
-  restore(id: number): Topic | undefined {
-    return db
+  async restore(id: number): Promise<Topic | undefined> {
+    return await db
       .update(topics)
       .set({ isDeleted: false, updatedAt: new Date().toISOString() })
       .where(eq(topics.id, id))
@@ -456,12 +460,12 @@ export const topicRepository = {
   /**
    * Adds an alias for a topic. Silently ignores duplicates.
    */
-  addAlias(topicId: number, alias: string): void {
+  async addAlias(topicId: number, alias: string): Promise<void> {
     const normalized = alias.toLowerCase().trim();
     if (!normalized) return;
 
     try {
-      db.insert(topicAliases)
+      await db.insert(topicAliases)
         .values({ topicId, alias: normalized })
         .onConflictDoNothing()
         .run();
@@ -473,8 +477,8 @@ export const topicRepository = {
   /**
    * Returns all aliases for a given topic.
    */
-  getAliases(topicId: number): TopicAlias[] {
-    return db
+  async getAliases(topicId: number): Promise<TopicAlias[]> {
+    return await db
       .select()
       .from(topicAliases)
       .where(eq(topicAliases.topicId, topicId))
@@ -485,13 +489,13 @@ export const topicRepository = {
    * Removes all aliases for a topic then re-inserts the provided list.
    * Used when a topic is renamed.
    */
-  replaceAliases(topicId: number, aliases: string[]): void {
-    db.delete(topicAliases)
+  async replaceAliases(topicId: number, aliases: string[]): Promise<void> {
+    await db.delete(topicAliases)
       .where(eq(topicAliases.topicId, topicId))
       .run();
 
     for (const alias of aliases) {
-      topicRepository.addAlias(topicId, alias);
+      await topicRepository.addAlias(topicId, alias);
     }
   },
 
@@ -500,14 +504,14 @@ export const topicRepository = {
   /**
    * Returns dashboard-level aggregate stats across all non-deleted topics.
    */
-  getDashboardStats(): {
+  async getDashboardStats(): Promise<{
     totalTopics: number;
     totalGenerated: number;
     totalNeedsRefresh: number;
     totalNotGenerated: number;
     byCategory: Array<{ category: string; count: number }>;
-  } {
-    const counts = db
+  }> {
+    const counts = await db
       .select({
         total: sql<number>`COUNT(*)`,
         generated: sql<number>`SUM(CASE WHEN topic_status = 'generated' THEN 1 ELSE 0 END)`,
@@ -518,7 +522,7 @@ export const topicRepository = {
       .where(eq(topics.isDeleted, false))
       .get();
 
-    const byCategory = db
+    const byCategory = await db
       .select({
         category: topics.category,
         count: sql<number>`COUNT(*)`,
@@ -530,13 +534,13 @@ export const topicRepository = {
       .all();
 
     return {
-      totalTopics: counts?.total ?? 0,
-      totalGenerated: counts?.generated ?? 0,
-      totalNeedsRefresh: counts?.needsRefresh ?? 0,
-      totalNotGenerated: counts?.notGenerated ?? 0,
+      totalTopics: Number(counts?.total ?? 0),
+      totalGenerated: Number(counts?.generated ?? 0),
+      totalNeedsRefresh: Number(counts?.needsRefresh ?? 0),
+      totalNotGenerated: Number(counts?.notGenerated ?? 0),
       byCategory: byCategory.map((r) => ({
         category: r.category,
-        count: r.count,
+        count: Number(r.count),
       })),
     };
   },
@@ -544,12 +548,12 @@ export const topicRepository = {
   /**
    * Returns the count of active (non-deleted) topics.
    */
-  count(): number {
-    const result = db
+  async count(): Promise<number> {
+    const result = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(topics)
       .where(eq(topics.isDeleted, false))
       .get();
-    return result?.count ?? 0;
+    return Number(result?.count ?? 0);
   },
 } as const;

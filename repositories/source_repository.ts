@@ -28,10 +28,10 @@ export const sourceRepository = {
    * Creates a new source.
    * name must be unique — throws if duplicate (caller handles the DB error).
    */
-  create(input: CreateSourceInput): Source {
+  async create(input: CreateSourceInput): Promise<Source> {
     const now = new Date().toISOString();
 
-    const result = db
+    const result = await db
       .insert(sources)
       .values({
         name: input.name.trim(),
@@ -48,8 +48,8 @@ export const sourceRepository = {
   /**
    * Finds a source by its unique name (case-insensitive).
    */
-  findByName(name: string): Source | undefined {
-    return db
+  async findByName(name: string): Promise<Source | undefined> {
+    return await db
       .select()
       .from(sources)
       .where(eq(sql`lower(${sources.name})`, name.toLowerCase().trim()))
@@ -59,39 +59,39 @@ export const sourceRepository = {
   /**
    * Finds a source by its primary key.
    */
-  findById(id: number): Source | undefined {
-    return db.select().from(sources).where(eq(sources.id, id)).get();
+  async findById(id: number): Promise<Source | undefined> {
+    return await db.select().from(sources).where(eq(sources.id, id)).get();
   },
 
   /**
    * Finds a source by name or creates it if it doesn't exist.
    * Returns the existing or newly created source.
    */
-  findOrCreate(name: string): Source {
-    const existing = sourceRepository.findByName(name);
+  async findOrCreate(name: string): Promise<Source> {
+    const existing = await sourceRepository.findByName(name);
     if (existing) return existing;
-    return sourceRepository.create({ name });
+    return await sourceRepository.create({ name });
   },
 
   /**
    * Returns all sources ordered by name ascending.
    */
-  findAll(): Source[] {
-    return db.select().from(sources).orderBy(asc(sources.name)).all();
+  async findAll(): Promise<Source[]> {
+    return await db.select().from(sources).orderBy(asc(sources.name)).all();
   },
 
   /**
    * Returns sources ordered by most recently updated (most active).
    */
-  findAllByActivity(): Source[] {
-    return db.select().from(sources).orderBy(desc(sources.updatedAt)).all();
+  async findAllByActivity(): Promise<Source[]> {
+    return await db.select().from(sources).orderBy(desc(sources.updatedAt)).all();
   },
 
   /**
    * Returns sources whose names contain the search term.
    */
-  search(term: string): Source[] {
-    return db
+  async search(term: string): Promise<Source[]> {
+    return await db
       .select()
       .from(sources)
       .where(like(sources.name, `%${term}%`))
@@ -103,8 +103,8 @@ export const sourceRepository = {
    * Updates the source's name.
    * Stamps updatedAt.
    */
-  updateName(id: number, name: string): Source | undefined {
-    const result = db
+  async updateName(id: number, name: string): Promise<Source | undefined> {
+    const result = await db
       .update(sources)
       .set({ name: name.trim(), updatedAt: new Date().toISOString() })
       .where(eq(sources.id, id))
@@ -119,8 +119,8 @@ export const sourceRepository = {
    * by counting non-deleted approved questions directly from the DB.
    * Called after bulk imports to correct any drift.
    */
-  recalculateTotalQuestions(sourceId: number): void {
-    db.run(
+  async recalculateTotalQuestions(sourceId: number): Promise<void> {
+    await db.run(
       sql`
         UPDATE sources
         SET
@@ -139,8 +139,8 @@ export const sourceRepository = {
    * Will fail if questions reference this source (FK restrict).
    * Returns true if a row was deleted.
    */
-  delete(id: number): boolean {
-    const result = db
+  async delete(id: number): Promise<boolean> {
+    const result = await db
       .delete(sources)
       .where(eq(sources.id, id))
       .returning()
@@ -152,11 +152,11 @@ export const sourceRepository = {
   /**
    * Returns the total count of sources.
    */
-  count(): number {
-    const result = db
+  async count(): Promise<number> {
+    const result = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(sources)
       .get();
-    return result?.count ?? 0;
+    return Number(result?.count ?? 0);
   },
 } as const;

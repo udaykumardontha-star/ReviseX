@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   if (status) filters.status = status as NonNullable<TopicFilterOptions["status"]>;
   if (q) filters.search = q;
 
-  const result = topicService.listTopics({ ...filters, page });
+  const result = await topicService.listTopics({ ...filters, page });
   if (!result.success) return NextResponse.json({ error: result.error }, { status: 500 });
   return NextResponse.json(result.data);
 }

@@ -9,7 +9,7 @@ export async function POST(
   const jobId = parseInt(jobIdStr, 10);
   if (isNaN(jobId)) return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
 
-  const result = stagingService.approveAll(jobId);
+  const result = await stagingService.approveAll(jobId);
   if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
   return NextResponse.json(result.data);
 }

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function RevisionPage() {
-  const result = revisionService.getDashboardData();
+  const result = await revisionService.getDashboardData();
   const data = result.success ? result.data : null;
   return <RevisionPageClient data={data} />;
 }

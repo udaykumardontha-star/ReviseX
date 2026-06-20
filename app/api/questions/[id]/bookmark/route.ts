@@ -9,7 +9,7 @@ export async function POST(
   const id = parseInt(idStr, 10);
   if (isNaN(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
-  const result = questionService.toggleBookmark(id);
+  const result = await questionService.toggleBookmark(id);
   if (!result.success) return NextResponse.json({ error: result.error, code: result.code }, { status: 404 });
   return NextResponse.json(result.data);
 }

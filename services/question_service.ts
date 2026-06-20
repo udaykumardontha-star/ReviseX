@@ -69,20 +69,20 @@ export const questionService = {
    *
    * Returns { promoted, skipped, topicsCreated }.
    */
-  promoteApprovedQuestions(
+  async promoteApprovedQuestions(
     importJobId: number
-  ): Result<PromoteQuestionsResult> {
-    const job = importJobRepository.findById(importJobId);
+  ): Promise<Result<PromoteQuestionsResult>> {
+    const job = await importJobRepository.findById(importJobId);
     if (!job) {
       return err(`Import job #${importJobId} not found`, null, "NOT_FOUND");
     }
 
-    const source = sourceRepository.findById(job.sourceId);
+    const source = await sourceRepository.findById(job.sourceId);
     if (!source) {
       return err(`Source #${job.sourceId} not found`, null, "NOT_FOUND");
     }
 
-    const approvedStaged = stagedQuestionRepository.findApproved(importJobId);
+    const approvedStaged = await stagedQuestionRepository.findApproved(importJobId);
     if (approvedStaged.length === 0) {
       return ok({ promoted: 0, skipped: 0, topicsCreated: 0 });
     }
@@ -98,11 +98,11 @@ export const questionService = {
       const slug = toSlug(normalizedName);
       const category = staged.category as ValidCategory;
 
-      let topic = topicRepository.resolveByNameOrAlias(normalizedName);
+      let topic = await topicRepository.resolveByNameOrAlias(normalizedName);
 
       if (!topic) {
         // Create new topic
-        const created = topicRepository.findOrCreate({
+        const created = await topicRepository.findOrCreate({
           slug,
           name: normalizedName,
           category,
@@ -110,17 +110,17 @@ export const questionService = {
         topic = created;
         topicsCreated++;
         // Register the raw AI string as an alias for future dedup
-        topicRepository.addAlias(topic.id, rawTopicName.toLowerCase().trim());
+        await topicRepository.addAlias(topic.id, rawTopicName.toLowerCase().trim());
       } else {
         // Register the alias even if topic already exists
-        topicRepository.addAlias(topic.id, rawTopicName.toLowerCase().trim());
+        await topicRepository.addAlias(topic.id, rawTopicName.toLowerCase().trim());
       }
 
       // Hash the question for deduplication
       const questionHash = hashQuestion(staged.question);
 
       // Attempt insert (skip if hash collision)
-      const inserted = questionRepository.create({
+      const inserted = await questionRepository.create({
         questionHash,
         topicId: topic.id,
         sourceId: source.id,
@@ -139,14 +139,14 @@ export const questionService = {
       if (inserted) {
         promoted++;
         // Mark topic as needing note refresh since it gained new questions
-        topicRepository.markNeedsRefresh(topic.id);
+        await topicRepository.markNeedsRefresh(topic.id);
       } else {
         skipped++;
       }
     }
 
     // Recalculate source counter after bulk promotion
-    sourceRepository.recalculateTotalQuestions(source.id);
+    await sourceRepository.recalculateTotalQuestions(source.id);
 
     return ok({ promoted, skipped, topicsCreated });
   },
@@ -155,14 +155,14 @@ export const questionService = {
    * Returns a paginated + filtered list of questions from the question bank.
    * Enriched with topic name and bookmark status.
    */
-  listQuestions(
+  async listQuestions(
     options: QuestionFilterOptions & { page?: number }
-  ): Result<QuestionSearchResult> {
+  ): Promise<Result<QuestionSearchResult>> {
     const pageSize = options.limit ?? 20;
     const page = options.page ?? 1;
     const offset = (page - 1) * pageSize;
 
-    const { items, total } = questionRepository.findAll({
+    const { items, total } = await questionRepository.findAll({
       ...options,
       limit: pageSize,
       offset,
@@ -175,17 +175,17 @@ export const questionService = {
    * Full-text search over the questions FTS5 index.
    * Returns ranked results with snippet highlights.
    */
-  searchQuestions(
+  async searchQuestions(
     query: string,
     limit: number = 20,
     offset: number = 0
-  ): Result<FtsQuestionSearchResult> {
+  ): Promise<Result<FtsQuestionSearchResult>> {
     if (!query.trim() || query.trim().length < 2) {
       return err("Search query must be at least 2 characters", null, "VALIDATION_ERROR");
     }
 
-    const items = questionRepository.ftsSearch(query, limit, offset);
-    const total = questionRepository.ftsSearchCount(query);
+    const items = await questionRepository.ftsSearch(query, limit, offset);
+    const total = await questionRepository.ftsSearchCount(query);
 
     return ok({ items, total, query: query.trim() });
   },
@@ -194,36 +194,36 @@ export const questionService = {
    * Returns a single question with topic + bookmark info.
    * Also increments the view counter.
    */
-  getQuestion(id: number): Result<QuestionWithTopic> {
-    const question = questionRepository.findByIdWithTopic(id);
+  async getQuestion(id: number): Promise<Result<QuestionWithTopic>> {
+    const question = await questionRepository.findByIdWithTopic(id);
     if (!question) {
       return err(`Question #${id} not found`, null, "NOT_FOUND");
     }
 
-    questionRepository.incrementViewed(id);
+    await questionRepository.incrementViewed(id);
     return ok(question);
   },
 
   /**
    * Returns questions for a specific topic (for the "Practice" tab).
    */
-  getQuestionsForTopic(
+  async getQuestionsForTopic(
     topicId: number,
     limit: number = 20,
     offset: number = 0
-  ): Result<{ items: Question[]; total: number }> {
-    const topic = topicRepository.findById(topicId);
+  ): Promise<Result<{ items: Question[]; total: number }>> {
+    const topic = await topicRepository.findById(topicId);
     if (!topic) {
       return err(`Topic #${topicId} not found`, null, "NOT_FOUND");
     }
 
-    const { items, total } = questionRepository.findAll({
+    const { items, total } = await questionRepository.findAll({
       topicId,
       limit,
       offset,
     });
 
-    return ok({ items: items as Question[], total });
+    return ok({ items: items as unknown as Question[], total });
   },
 
   // ─── Bookmarks ─────────────────────────────────────────────────────────────
@@ -232,20 +232,20 @@ export const questionService = {
    * Toggles bookmark on a question.
    * Returns { bookmarked: true|false } indicating the new state.
    */
-  toggleBookmark(
+  async toggleBookmark(
     questionId: number
-  ): Result<{ bookmarked: boolean }> {
-    const question = questionRepository.findById(questionId);
+  ): Promise<Result<{ bookmarked: boolean }>> {
+    const question = await questionRepository.findById(questionId);
     if (!question) {
       return err(`Question #${questionId} not found`, null, "NOT_FOUND");
     }
 
-    const isBookmarked = questionRepository.isBookmarked(questionId);
+    const isBookmarked = await questionRepository.isBookmarked(questionId);
     if (isBookmarked) {
-      questionRepository.unbookmark(questionId);
+      await questionRepository.unbookmark(questionId);
       return ok({ bookmarked: false });
     } else {
-      questionRepository.bookmark(questionId);
+      await questionRepository.bookmark(questionId);
       return ok({ bookmarked: true });
     }
   },
@@ -253,8 +253,8 @@ export const questionService = {
   /**
    * Returns all bookmarked questions with full metadata.
    */
-  getBookmarkedQuestions(): Result<QuestionSearchResult> {
-    const { items, total } = questionRepository.findAll({
+  async getBookmarkedQuestions(): Promise<Result<QuestionSearchResult>> {
+    const { items, total } = await questionRepository.findAll({
       isBookmarked: true,
       limit: 200,
     });
@@ -266,12 +266,12 @@ export const questionService = {
   /**
    * Flags a question with a reason.
    */
-  flagQuestion(
+  async flagQuestion(
     questionId: number,
     reason: string,
     details?: string
-  ): Result<QuestionFlag> {
-    const question = questionRepository.findById(questionId);
+  ): Promise<Result<QuestionFlag>> {
+    const question = await questionRepository.findById(questionId);
     if (!question) {
       return err(`Question #${questionId} not found`, null, "NOT_FOUND");
     }
@@ -279,7 +279,7 @@ export const questionService = {
       return err("Flag reason cannot be empty", null, "VALIDATION_ERROR");
     }
 
-    const flag = questionRepository.flag({
+    const flag = await questionRepository.flag({
       questionId,
       reason: reason.trim(),
       ...(details ? { details } : {}),
@@ -290,8 +290,8 @@ export const questionService = {
   /**
    * Resolves a flag (marks it as reviewed/closed).
    */
-  resolveFlag(flagId: number): Result<QuestionFlag> {
-    const flag = questionRepository.resolveFlag(flagId);
+  async resolveFlag(flagId: number): Promise<Result<QuestionFlag>> {
+    const flag = await questionRepository.resolveFlag(flagId);
     if (!flag) {
       return err(`Flag #${flagId} not found`, null, "NOT_FOUND");
     }
@@ -301,8 +301,8 @@ export const questionService = {
   /**
    * Returns all unresolved flags across the question bank.
    */
-  getAllFlags(): QuestionFlag[] {
-    return questionRepository.getAllUnresolvedFlags();
+  async getAllFlags(): Promise<QuestionFlag[]> {
+    return await questionRepository.getAllUnresolvedFlags();
   },
 
   // ─── Soft Delete / Restore ─────────────────────────────────────────────────
@@ -310,20 +310,20 @@ export const questionService = {
   /**
    * Soft-deletes a question (hides from all UI).
    */
-  deleteQuestion(id: number): Result<true> {
-    const question = questionRepository.findById(id);
+  async deleteQuestion(id: number): Promise<Result<true>> {
+    const question = await questionRepository.findById(id);
     if (!question) {
       return err(`Question #${id} not found`, null, "NOT_FOUND");
     }
-    questionRepository.softDelete(id);
+    await questionRepository.softDelete(id);
     return ok(true);
   },
 
   /**
    * Restores a soft-deleted question.
    */
-  restoreQuestion(id: number): Result<Question> {
-    const restored = questionRepository.restore(id);
+  async restoreQuestion(id: number): Promise<Result<Question>> {
+    const restored = await questionRepository.restore(id);
     if (!restored) {
       return err(`Question #${id} not found or is not deleted`, null, "NOT_FOUND");
     }
@@ -335,7 +335,7 @@ export const questionService = {
   /**
    * Returns aggregate question bank stats for the dashboard.
    */
-  getStats() {
-    return questionRepository.getStats();
+  async getStats() {
+    return await questionRepository.getStats();
   },
 } as const;
