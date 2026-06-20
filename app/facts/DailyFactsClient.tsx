@@ -51,7 +51,7 @@ export function DailyFactsClient() {
           </div>
         ) : (
           facts.map((fact, idx) => (
-            <div key={idx} className="card" style={{ padding: "16px 20px" }}>
+            <div key={idx} className="card" style={{ padding: "16px 20px", borderLeft: "4px solid var(--primary)" }}>
               <div style={{ fontSize: 16, fontWeight: 500, color: "var(--text-primary)", lineHeight: 1.5, marginBottom: 12 }}>
                 {fact.fact}
               </div>

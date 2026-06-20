@@ -4,10 +4,11 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 
 const navItems = [
-  { href: "/", label: "Search", icon: "🔍", group: "Overview" },
-  { href: "/topics", label: "Topics", icon: "🗂️", group: "Library" },
-  { href: "/import", label: "Import", icon: "📥", group: "Library" },
-  { href: "/facts", label: "Daily Facts", icon: "💡", group: "Overview" },
+  { href: "/", label: "Search", icon: "🔍" },
+  { href: "/topics", label: "Topics", icon: "🗂️" },
+  { href: "/questions", label: "Questions", icon: "❓" },
+  { href: "/import", label: "Import", icon: "📥" },
+  { href: "/facts", label: "Daily Facts", icon: "💡" },
 ];
 
 export function Sidebar() {
@@ -21,8 +22,6 @@ export function Sidebar() {
       .catch(() => {});
   }, []);
 
-  const groups = Array.from(new Set(navItems.map((n) => n.group)));
-
   return (
     <aside className="app-sidebar">
       <div className="sidebar-logo">
@@ -31,29 +30,24 @@ export function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {groups.map((group) => (
-          <div key={group}>
-            <div className="nav-group-label">{group}</div>
-            {navItems
-              .filter((n) => n.group === group)
-              .map((item) => {
-                const isActive =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`nav-item ${isActive ? "active" : ""}`}
-                  >
-                    <span style={{ fontSize: 15 }}>{item.icon}</span>
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-          </div>
-        ))}
+        <div>
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`nav-item ${isActive ? "active" : ""}`}
+              >
+                <span style={{ fontSize: 15 }}>{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       <div className="sidebar-footer">

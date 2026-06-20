@@ -68,7 +68,7 @@ function SearchContent() {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       setQuery(val);
-      const url = val.trim() ? `/search?q=${encodeURIComponent(val)}` : "/search";
+      const url = val.trim() ? `/?q=${encodeURIComponent(val)}` : "/";
       router.replace(url, { scroll: false });
     }, 300);
   };
