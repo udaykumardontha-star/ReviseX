@@ -41,6 +41,7 @@ export type ErrorCode =
   | "AI_PARSE_ERROR"
   | "AI_API_ERROR"
   | "DB_ERROR"
+  | "DATABASE_ERROR"
   | "FILE_TOO_LARGE"
   | "UNSUPPORTED_FORMAT"
   | "HASH_COLLISION"

@@ -12,11 +12,10 @@
  */
 
 import { eq, and, inArray, desc, sql, ne } from "drizzle-orm";
-import { db, rawSqlite } from "@/db/connection";
+import { db } from "@/db/connection";
 import { stagedQuestions } from "@/db/schema";
 import type {
   StagedQuestion,
-  NewStagedQuestion,
   QuestionStatus,
   ValidCategory,
   ValidDifficulty,
@@ -105,7 +104,7 @@ export const stagedQuestionRepository = {
 
     const now = new Date().toISOString();
 
-    const insertMany = db.transaction(() => {
+    return db.transaction(() => {
       let count = 0;
       for (const input of inputs) {
         db.insert(stagedQuestions)
@@ -127,8 +126,6 @@ export const stagedQuestionRepository = {
       }
       return count;
     });
-
-    return insertMany();
   },
 
   /**

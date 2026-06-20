@@ -5,7 +5,11 @@
  * Ensures all topic slugs are URL-safe, unique-friendly, and consistent.
  */
 
-import { toSlug } from "./normalizer";
+import { toSlug as _toSlug } from "./normalizer";
+
+/** Re-export toSlug so services can import it from slugifier */
+export const toSlug = _toSlug;
+
 
 /**
  * Generates a topic slug from a display name.

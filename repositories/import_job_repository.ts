@@ -14,7 +14,7 @@
 import { eq, desc, inArray, and, sql } from "drizzle-orm";
 import { db } from "@/db/connection";
 import { importJobs } from "@/db/schema";
-import type { ImportJob, NewImportJob, ImportJobStatus } from "@/db/schema";
+import type { ImportJob, ImportJobStatus } from "@/db/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

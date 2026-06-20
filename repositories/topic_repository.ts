@@ -13,7 +13,7 @@
  *     by triggers (questions) and by service layer (notes, facts)
  */
 
-import { eq, like, desc, asc, and, inArray, sql, ne } from "drizzle-orm";
+import { eq, like, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { db, rawSqlite } from "@/db/connection";
 import {
   topics,
@@ -23,7 +23,6 @@ import {
 } from "@/db/schema";
 import type {
   Topic,
-  NewTopic,
   TopicAlias,
   TopicStatus,
   ValidCategory,

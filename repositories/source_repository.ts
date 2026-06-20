@@ -9,7 +9,7 @@
 import { eq, like, desc, asc, sql } from "drizzle-orm";
 import { db } from "@/db/connection";
 import { sources } from "@/db/schema";
-import type { Source, NewSource } from "@/db/schema";
+import type { Source } from "@/db/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
