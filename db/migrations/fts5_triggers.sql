@@ -50,62 +50,14 @@ END;
 CREATE TRIGGER IF NOT EXISTS questions_fts_after_delete
 AFTER DELETE ON questions
 BEGIN
-    INSERT INTO questions_fts (
-        questions_fts,
-        rowid,
-        question,
-        option_a,
-        option_b,
-        option_c,
-        option_d,
-        short_explanation,
-        category,
-        topic_name
-    )
-    VALUES (
-        'delete',
-        OLD.id,
-        OLD.question,
-        OLD.option_a,
-        OLD.option_b,
-        OLD.option_c,
-        OLD.option_d,
-        COALESCE(OLD.short_explanation, ''),
-        OLD.category,
-        ''
-    );
+    DELETE FROM questions_fts WHERE rowid = OLD.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS questions_fts_after_update
 AFTER UPDATE ON questions
 BEGIN
-    -- Step 1: Remove the old FTS entry
-    INSERT INTO questions_fts (
-        questions_fts,
-        rowid,
-        question,
-        option_a,
-        option_b,
-        option_c,
-        option_d,
-        short_explanation,
-        category,
-        topic_name
-    )
-    VALUES (
-        'delete',
-        OLD.id,
-        OLD.question,
-        OLD.option_a,
-        OLD.option_b,
-        OLD.option_c,
-        OLD.option_d,
-        COALESCE(OLD.short_explanation, ''),
-        OLD.category,
-        ''
-    );
+    DELETE FROM questions_fts WHERE rowid = OLD.id;
 
-    -- Step 2: Insert the updated entry (only if not soft-deleted)
     INSERT INTO questions_fts (
         rowid,
         question,
@@ -145,15 +97,13 @@ END;
 CREATE TRIGGER IF NOT EXISTS topics_fts_after_delete
 AFTER DELETE ON topics
 BEGIN
-    INSERT INTO topics_fts (topics_fts, rowid, slug, name, category)
-    VALUES ('delete', OLD.id, OLD.slug, OLD.name, OLD.category);
+    DELETE FROM topics_fts WHERE rowid = OLD.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS topics_fts_after_update
 AFTER UPDATE ON topics
 BEGIN
-    INSERT INTO topics_fts (topics_fts, rowid, slug, name, category)
-    VALUES ('delete', OLD.id, OLD.slug, OLD.name, OLD.category);
+    DELETE FROM topics_fts WHERE rowid = OLD.id;
 
     INSERT INTO topics_fts (rowid, slug, name, category)
     SELECT NEW.id, NEW.slug, NEW.name, NEW.category
@@ -175,15 +125,13 @@ END;
 CREATE TRIGGER IF NOT EXISTS notes_fts_after_delete
 AFTER DELETE ON notes
 BEGIN
-    INSERT INTO notes_fts (notes_fts, rowid, content)
-    VALUES ('delete', OLD.id, OLD.content);
+    DELETE FROM notes_fts WHERE rowid = OLD.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS notes_fts_after_update
 AFTER UPDATE ON notes
 BEGIN
-    INSERT INTO notes_fts (notes_fts, rowid, content)
-    VALUES ('delete', OLD.id, OLD.content);
+    DELETE FROM notes_fts WHERE rowid = OLD.id;
 
     INSERT INTO notes_fts (rowid, content)
     SELECT NEW.id, NEW.content

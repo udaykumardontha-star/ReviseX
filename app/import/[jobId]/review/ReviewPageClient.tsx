@@ -126,14 +126,28 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
 
   const promote = async () => {
     setPromoting(true);
-    const r = await fetch(`/api/staging/${jobId}/promote`, { method: "POST" });
-    const d = await r.json() as { promoted?: number; skipped?: number; topicsCreated?: number; error?: string };
-    setPromoting(false);
-    if (r.ok) {
+    try {
+      const r = await fetch(`/api/staging/${jobId}/promote`, { method: "POST" });
+      if (!r.ok) {
+        let errorMsg = "Promote failed";
+        try {
+          const errData = await r.json();
+          errorMsg = errData.error || errorMsg;
+        } catch {
+          errorMsg = `Server error: ${r.status}`;
+        }
+        showToast(`❌ ${errorMsg}`, "error");
+        setPromoting(false);
+        return;
+      }
+      
+      const d = await r.json() as { promoted?: number; skipped?: number; topicsCreated?: number };
       showToast(`✅ Promoted ${d.promoted ?? 0} questions! ${d.topicsCreated ?? 0} new topics.`);
       void fetchQueue();
-    } else {
-      showToast(`❌ ${d.error ?? "Promote failed"}`, "error");
+    } catch (e) {
+      showToast(`❌ Network error or server crash`, "error");
+    } finally {
+      setPromoting(false);
     }
   };
 
