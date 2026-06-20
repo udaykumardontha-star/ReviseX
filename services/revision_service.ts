@@ -124,7 +124,7 @@ export const revisionService = {
     try {
       const streak = revisionSessionRepository.getStreakStats();
       const recentSessions = revisionSessionRepository.findRecentWithTopic(8);
-      const dailyActivity = revisionSessionRepository.getDailyActivity(30);
+      const dailyActivity = revisionSessionRepository.getDailyActivity(90);
       const totalStudiedTopics = revisionSessionRepository.countStudiedTopics();
 
       const noteStats = noteRepository.getStats();
