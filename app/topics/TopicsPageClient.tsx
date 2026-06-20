@@ -4,7 +4,7 @@ import Link from "next/link";
 
 type Topic = {
   id: number; slug: string; name: string; category: string;
-  totalQuestions: number; topicStatus: string; hasNote: boolean;
+  totalQuestions: number; topicStatus: string;
   totalNotes: number;
 };
 type ListData = { items: Topic[]; total: number; page: number; pageSize: number };
