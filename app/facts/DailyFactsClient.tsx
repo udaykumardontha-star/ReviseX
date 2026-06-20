@@ -51,9 +51,10 @@ export function DailyFactsClient() {
           </div>
         ) : (
           facts.map((fact, idx) => (
-            <div key={idx} style={{ padding: "16px 20px", borderRadius: "12px", background: "rgba(16, 185, 129, 0.1)", border: "none" }}>
-              <div style={{ fontSize: 16, fontWeight: 500, color: "var(--text-primary)", lineHeight: 1.5, marginBottom: 12 }}>
-                {fact.fact}
+            <div key={idx} className="fact-card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>💡</span>
+                <div className="fact-text">{fact.fact}</div>
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <Link

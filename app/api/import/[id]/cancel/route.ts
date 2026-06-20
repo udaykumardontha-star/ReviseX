@@ -10,7 +10,11 @@ export async function POST(
     const jobId = parseInt(id, 10);
     if (isNaN(jobId)) return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
 
-    const result = await importService.pauseJob(jobId);
+    const pauseResult = await importService.pauseJob(jobId);
+    if (!pauseResult.success) {
+      // If it's not processing, it might already be paused/failed, so we can ignore pause failure
+    }
+    const result = await importService.deleteJob(jobId);
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }

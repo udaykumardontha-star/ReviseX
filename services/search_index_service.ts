@@ -219,16 +219,14 @@ export const searchIndexService = {
   async rebuildQuestionsIndex(): Promise<Result<FtsRebuildResult>> {
     const t0 = Date.now();
     try {
-      await rawSqlite.execute("BEGIN;");
-      await rawSqlite.execute("DELETE FROM questions_fts;");
-      await rawSqlite.execute(`
-        INSERT INTO questions_fts(rowid, question, option_a, option_b, option_c, option_d, short_explanation, category, topic_name)
+      await rawSqlite.batch([
+        "DELETE FROM questions_fts;",
+        `INSERT INTO questions_fts(rowid, question, option_a, option_b, option_c, option_d, short_explanation, category, topic_name)
           SELECT q.id, q.question, q.option_a, q.option_b, q.option_c, q.option_d, COALESCE(q.short_explanation, ''), q.category, COALESCE(t.name, '')
           FROM questions q
           LEFT JOIN topics t ON t.id = q.topic_id
-          WHERE q.is_deleted = 0;
-      `);
-      await rawSqlite.execute("COMMIT;");
+          WHERE q.is_deleted = 0;`
+      ], "write");
 
       const countRes = await rawSqlite.execute("SELECT COUNT(*) as c FROM questions_fts");
       const count = Number(countRes.rows[0]?.c ?? 0);
@@ -246,13 +244,11 @@ export const searchIndexService = {
   async rebuildTopicsIndex(): Promise<Result<FtsRebuildResult>> {
     const t0 = Date.now();
     try {
-      await rawSqlite.execute("BEGIN;");
-      await rawSqlite.execute("DELETE FROM topics_fts;");
-      await rawSqlite.execute(`
-        INSERT INTO topics_fts(rowid, slug, name, category)
-          SELECT id, slug, name, category FROM topics WHERE is_deleted = 0;
-      `);
-      await rawSqlite.execute("COMMIT;");
+      await rawSqlite.batch([
+        "DELETE FROM topics_fts;",
+        `INSERT INTO topics_fts(rowid, slug, name, category)
+          SELECT id, slug, name, category FROM topics WHERE is_deleted = 0;`
+      ], "write");
 
       const countRes = await rawSqlite.execute("SELECT COUNT(*) as c FROM topics_fts");
       const count = Number(countRes.rows[0]?.c ?? 0);
@@ -270,16 +266,11 @@ export const searchIndexService = {
   async rebuildNotesIndex(): Promise<Result<FtsRebuildResult>> {
     const t0 = Date.now();
     try {
-      await rawSqlite.execute("BEGIN;");
-      await rawSqlite.execute("DELETE FROM notes_fts;");
-      await rawSqlite.execute(`
-        INSERT INTO notes_fts(rowid, content, topic_name)
-          SELECT n.id, n.content, t.name
-          FROM notes n
-          JOIN topics t ON t.id = n.topic_id
-          WHERE n.is_deleted = 0 AND t.is_deleted = 0;
-      `);
-      await rawSqlite.execute("COMMIT;");
+      await rawSqlite.batch([
+        "DELETE FROM notes_fts;",
+        `INSERT INTO notes_fts(rowid, content)
+          SELECT id, content FROM notes WHERE is_deleted = 0;`
+      ], "write");
 
       const countRes = await rawSqlite.execute("SELECT COUNT(*) as c FROM notes_fts");
       const count = Number(countRes.rows[0]?.c ?? 0);
