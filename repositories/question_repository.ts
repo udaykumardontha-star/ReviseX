@@ -228,6 +228,14 @@ export const questionRepository = {
 
     return {
       ...result,
+      optionA: (result as any).option_a ?? result.optionA,
+      optionB: (result as any).option_b ?? result.optionB,
+      optionC: (result as any).option_c ?? result.optionC,
+      optionD: (result as any).option_d ?? result.optionD,
+      correctOption: (result as any).correct_option ?? result.correctOption,
+      shortExplanation: (result as any).short_explanation ?? result.shortExplanation,
+      timesViewed: (result as any).times_viewed ?? result.timesViewed,
+      timesRevised: (result as any).times_revised ?? result.timesRevised,
       isBookmarked: Boolean(result.isBookmarked),
     };
   },
@@ -311,7 +319,18 @@ export const questionRepository = {
       .get(...params) as { count: number };
 
     return {
-      items: items.map((r) => ({ ...r, isBookmarked: Boolean(r.isBookmarked) })),
+      items: items.map((r) => ({
+        ...r,
+        optionA: (r as any).option_a ?? r.optionA,
+        optionB: (r as any).option_b ?? r.optionB,
+        optionC: (r as any).option_c ?? r.optionC,
+        optionD: (r as any).option_d ?? r.optionD,
+        correctOption: (r as any).correct_option ?? r.correctOption,
+        shortExplanation: (r as any).short_explanation ?? r.shortExplanation,
+        timesViewed: (r as any).times_viewed ?? r.timesViewed,
+        timesRevised: (r as any).times_revised ?? r.timesRevised,
+        isBookmarked: Boolean(r.isBookmarked),
+      })),
       total: countResult?.count ?? 0,
     };
   },

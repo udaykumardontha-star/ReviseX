@@ -20,6 +20,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 const DIFF_COLOR: Record<string, string> = { easy: "badge-green", medium: "badge-amber", hard: "badge-red" };
 
+const listCache = new Map<string, ListData>();
+
 export function QuestionsPageClient() {
   const [data, setData] = useState<ListData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,16 +35,26 @@ export function QuestionsPageClient() {
   const pageSize = 20;
 
   const fetchQuestions = useCallback(async () => {
-    setLoading(true);
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (q.trim().length >= 2) params.set("q", q.trim());
     if (category !== "All") params.set("category", category);
     if (difficulty !== "All") params.set("difficulty", difficulty);
     if (bookmarkedOnly) params.set("bookmarked", "true");
 
-    const r = await fetch(`/api/questions?${params.toString()}`);
+    const cacheKey = params.toString();
+    
+    // Serve from cache immediately to prevent UI flash
+    if (listCache.has(cacheKey)) {
+      setData(listCache.get(cacheKey)!);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    const r = await fetch(`/api/questions?${cacheKey}`);
     if (r.ok) {
       const d = await r.json() as ListData;
+      listCache.set(cacheKey, d);
       setData(d);
       // Sync bookmark state
       const bm: Record<number, boolean> = {};
