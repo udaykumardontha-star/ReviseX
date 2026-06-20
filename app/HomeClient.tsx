@@ -91,24 +91,19 @@ function SearchContent() {
       <div className="page-header">
         <div className="page-header-left">
           <h1 className="page-title">🔍 Search</h1>
-          <p className="page-subtitle">Search across questions, topics, and revision notes.</p>
         </div>
       </div>
 
       {/* Search Input */}
       <div className="card" style={{ padding: "16px 20px" }}>
         <div style={{ position: "relative" }}>
-          <span style={{
-            position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
-            color: "var(--text-muted)", pointerEvents: "none", fontSize: 16
-          }}>🔍</span>
           <input
             id="search-page-input"
             className="input"
             placeholder="Search questions, topics, notes…"
             value={inputVal}
             onChange={(e) => handleInput(e.target.value)}
-            style={{ paddingLeft: 42, fontSize: 16, height: 48 }}
+            style={{ padding: "0 16px", fontSize: 16, height: 48, width: "100%" }}
             autoFocus
           />
           {loading && (

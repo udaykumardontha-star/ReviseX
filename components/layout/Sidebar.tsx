@@ -1,7 +1,6 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
 
 const navItems = [
   { href: "/", label: "Search", icon: "🔍" },
@@ -13,14 +12,6 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [streak, setStreak] = useState(0);
-
-  useEffect(() => {
-    fetch("/api/dashboard")
-      .then((r) => r.json())
-      .then((d) => setStreak(d?.streak?.currentStreak ?? 0))
-      .catch(() => {});
-  }, []);
 
   return (
     <aside className="app-sidebar">

@@ -62,8 +62,9 @@ const QUESTION_EXTRACTOR_SYSTEM_PROMPT = `You are an SSC Exam Data Processor. Ex
    - No markdown, no bullet points, no lengthy theory.
    - Example: "The Battle of Plassey (1757) marked the beginning of British rule in India, fought between the British East India Company and Siraj ud-Daulah."
 6. If the input is an image: read the text visible in the image and extract MCQs from it.
-7. If no MCQs are found, return {"questions": []}.
-8. Return ONLY valid JSON. No markdown, no explanation, no code fences.
+7. If the text contains both Hindi and English (e.g. bilingual exam paper), completely IGNORE the Hindi part. Extract the question and options ONLY in English.
+8. If no MCQs are found, return {"questions": []}.
+9. Return ONLY valid JSON. No markdown, no explanation, no code fences.
 
 Output format:
 {

@@ -22,6 +22,7 @@ type JobEntry = {
   status: string;
   extractedQuestions: number;
   totalPages: number;
+  currentPage: number;
   createdAt: string;
 };
 
@@ -105,7 +106,6 @@ export function ImportPageClient() {
   const [file, setFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [textContent, setTextContent] = useState("");
-  const [sourceName, setSourceName] = useState("");
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -244,14 +244,14 @@ export function ImportPageClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             textContent: extractedPdfText || textContent.trim(),
-            sourceName: sourceName || (file ? file.name : "Manual Paste"),
+            sourceName: file ? file.name : "Manual Paste",
             fileName: file ? file.name : `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
           }),
         });
       } else {
         const formData = new FormData();
         formData.append("file", finalFile!);
-        formData.append("source", sourceName || finalFile!.name);
+        formData.append("source", finalFile!.name);
         startRes = await fetch("/api/import", { method: "POST", body: formData });
       }
 
@@ -461,19 +461,6 @@ export function ImportPageClient() {
             </div>
           )}
 
-          {/* Source Name */}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
-              Source Name <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span>
-            </label>
-            <input
-              className="input"
-              placeholder={mode === "text" ? 'e.g. "CGL 2023 Practice Set" or "Notes from class"' : 'e.g. "CGL 2023 Tier-1 Paper"'}
-              value={sourceName}
-              onChange={(e) => setSourceName(e.target.value)}
-              style={{ maxWidth: 420 }}
-            />
-          </div>
 
           {/* Error / Success */}
           {error && (
@@ -538,7 +525,7 @@ export function ImportPageClient() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {jobsData.jobs.map((job) => (
+            {jobsData.jobs.slice(0, 5).map((job) => (
               <div key={job.id} className="job-card">
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
                   <span style={{ fontSize: 20, flexShrink: 0 }}>
@@ -555,8 +542,16 @@ export function ImportPageClient() {
                     </div>
                   </div>
                 </div>
+
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-                  <span className={`badge ${statusColor(job.status)}`}>{job.status}</span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <span className={`badge ${statusColor(job.status)}`}>{job.status}</span>
+                    {job.status === "processing" && job.totalPages > 0 && (
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        Chunk {job.currentPage} / {job.totalPages}
+                      </span>
+                    )}
+                  </div>
                   {job.extractedQuestions > 0 && (
                     <span style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)" }}>
                       {job.extractedQuestions} Qs
@@ -566,6 +561,17 @@ export function ImportPageClient() {
                     <Link href={`/import/${job.id}/review`} className="btn btn-primary btn-sm">
                       Review →
                     </Link>
+                  )}
+                  {job.status === "processing" && (
+                     <button
+                       className="btn btn-ghost btn-sm"
+                       style={{ color: "var(--danger)" }}
+                       onClick={() => {
+                          fetch(`/api/import/${job.id}/cancel`, { method: "POST" }).then(() => fetchJobs());
+                       }}
+                     >
+                       Cancel
+                     </button>
                   )}
                 </div>
               </div>
