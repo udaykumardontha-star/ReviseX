@@ -38,8 +38,8 @@ export const settingsRepository = {
       .values({
         id: 1,
         databaseVersion: "v1",
-        maxAiCallsPerDay: 50,
-        maxQuestionsPerChunk: 30,
+        maxAiCallsPerDay: 99999,
+        maxQuestionsPerChunk: 100,
         pdfChunkSize: 10,
         aiCallsTodayCount: 0,
       })
@@ -99,27 +99,11 @@ export const settingsRepository = {
   },
 
   /**
-   * Checks whether the AI call limit for today has been reached.
-   * Resets stale counter automatically before checking.
+   * Rate limiting is DISABLED — always returns false.
+   * ReviseX uses the API key freely with no daily cap.
    */
   isAiRateLimitReached(): boolean {
-    const settings = settingsRepository.get();
-    const today = new Date().toISOString().slice(0, 10);
-
-    // Counter is from a previous day — reset it (lazily)
-    if (settings.aiCallsResetDate !== today) {
-      db.update(systemSettings)
-        .set({
-          aiCallsTodayCount: 0,
-          aiCallsResetDate: today,
-          updatedAt: new Date().toISOString(),
-        })
-        .where(eq(systemSettings.id, 1))
-        .run();
-      return false;
-    }
-
-    return settings.aiCallsTodayCount >= settings.maxAiCallsPerDay;
+    return false; // No rate limit enforced
   },
 
   /**

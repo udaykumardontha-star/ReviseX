@@ -1,20 +1,23 @@
 /**
  * services/import_service.ts
  *
- * Orchestrates the complete PDF import pipeline.
+ * Orchestrates the complete import pipeline for ALL input types:
+ *   - PDF  → extract text → chunk → Gemini (text prompt)
+ *   - Image (PNG/JPG/JPEG/WEBP) → base64 → Gemini Vision (image prompt)
+ *   - Text → raw text → chunk → Gemini (text prompt)
  *
  * Golden Rule enforced: Database First — check hash before any processing.
  *
- * Pipeline stages:
- *   1. Hash check → reject duplicate PDFs immediately (no AI call)
+ * Pipeline stages (same for all input types):
+ *   1. Hash check → reject duplicate files immediately (no AI call)
  *   2. Validate + store the import job
- *   3. Extract PDF text (no AI)
- *   4. Chunk by pages (per system_settings.pdfChunkSize)
- *   5. For each chunk: call Gemini → validate → store staged_questions
- *   6. Mark job as completed / failed
+ *   3. Build chunks (type-specific)
+ *   4. For each chunk: call Gemini → validate → store staged_questions
+ *   5. Mark job as completed / failed / paused
  *
- * The service returns Result<T> at every stage.
- * Progress is persisted to the DB after each chunk so jobs are resumable.
+ * Architecture:
+ *   app → services → repositories → db
+ *   No layer may be skipped. All results return Result<T>.
  */
 
 import { ok, err } from "@/types/result";
@@ -27,15 +30,24 @@ import {
 } from "@/repositories";
 import type { ImportJobProgress } from "@/repositories";
 import { geminiClient } from "@/lib/ai/gemini_client";
-import { pdfProcessor } from "@/lib/pdf/pdf_processor";
+import { pdfProcessor, detectFileType } from "@/lib/pdf/pdf_processor";
 import { validationService } from "@/services/validation_service";
+import { hashBuffer } from "@/lib/utils/hasher";
 import type { ImportJob } from "@/db/schema";
+import type { ImportFileType } from "@/lib/pdf/pdf_processor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type StartImportInput = {
-  fileBuffer: Buffer;
+  /** Raw file buffer — PDF or image */
+  fileBuffer?: Buffer;
+  /** Raw pasted text (text-type import) */
+  textContent?: string;
+  /** MIME type e.g. "application/pdf", "image/png", or "text/plain" */
+  mimeType?: string;
+  /** Original filename displayed in the UI */
   fileName: string;
+  /** Source label e.g. "CGL 2023 Tier-1" */
   sourceName: string;
 };
 
@@ -43,17 +55,17 @@ export type ImportStartResult = {
   jobId: number;
   sourceId: number;
   fileName: string;
+  /** Page count for PDF; 1 for images/text */
   totalPages: number;
   fileHash: string;
+  fileType: ImportFileType;
   isDuplicate: false;
 };
 
 export type ImportChunkResult = {
   chunkIndex: number;
-  pagesProcessed: number;
   questionsExtracted: number;
   questionsSkipped: number;
-  failedPages: number[];
 };
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -62,46 +74,73 @@ export const importService = {
   /**
    * STAGE 1 — Start Import
    *
-   * Validates the file, checks for duplicates by hash, creates the import job.
+   * Validates the input, checks for duplicates by hash, creates the import job.
    * Does NOT call Gemini. Does NOT extract text.
-   * Returns the job ID for the caller to start async processing.
+   * Returns the job ID for the caller to start processing.
+   *
+   * Works for PDF, Image, and Text inputs.
    */
-  async startImport(
-    input: StartImportInput
-  ): Promise<Result<ImportStartResult>> {
-    // Validate file size (max 100 MB)
-    const sizeCheck = pdfProcessor.validateFileSize(input.fileBuffer.length);
-    if (!sizeCheck.success) return sizeCheck;
+  async startImport(input: StartImportInput): Promise<Result<ImportStartResult>> {
+    // ── Determine file type ───────────────────────────────────────────────
+    let fileType: ImportFileType;
+    let fileHash: string;
+    let pageCount = 1;
+    let fileSizeBytes = 0;
 
-    // Extract text + hash (cheap, no AI)
-    const extractResult = await pdfProcessor.extractText(input.fileBuffer);
-    if (!extractResult.success) return extractResult;
+    if (input.textContent !== undefined && input.textContent.trim().length > 0) {
+      // TEXT import
+      fileType = "text";
+      const trimmed = input.textContent.trim();
+      fileHash = hashBuffer(Buffer.from(trimmed, "utf-8"));
+      fileSizeBytes = Buffer.byteLength(trimmed, "utf-8");
+      pageCount = 1;
+    } else if (input.fileBuffer && input.mimeType) {
+      // Validate file size first
+      const sizeCheck = pdfProcessor.validateFileSize(input.fileBuffer.length);
+      if (!sizeCheck.success) return sizeCheck;
 
-    const { fileHash, pageCount, fileSizeBytes } = extractResult.data;
+      fileSizeBytes = input.fileBuffer.length;
 
-    // ── Golden Rule: Database First ──────────────────────────────────────
-    // Check for duplicate BEFORE creating any job record
+      const detectedType = detectFileType(input.mimeType);
+      if (!detectedType) {
+        return err(
+          `Unsupported file type: ${input.mimeType}. Supported: PDF, PNG, JPG, JPEG, WEBP`,
+          null,
+          "UNSUPPORTED_FORMAT"
+        );
+      }
+      fileType = detectedType;
+
+      if (fileType === "pdf") {
+        // PDF — extract text to get page count + hash
+        const extractResult = await pdfProcessor.extractText(input.fileBuffer);
+        if (!extractResult.success) return extractResult;
+        fileHash = extractResult.data.fileHash;
+        pageCount = extractResult.data.pageCount;
+        if (pageCount === 0) {
+          return err("PDF has 0 pages or contains no extractable text.", null, "UNSUPPORTED_FORMAT");
+        }
+      } else {
+        // Image — hash the raw buffer
+        fileHash = pdfProcessor.hashBuffer(input.fileBuffer);
+        pageCount = 1;
+      }
+    } else {
+      return err("No file, image, or text content provided.", null, "VALIDATION_ERROR");
+    }
+
+    // ── Golden Rule: Database First ───────────────────────────────────────
     const existing = importJobRepository.findByHash(fileHash);
     if (existing) {
       return err(
-        `Duplicate PDF detected. This file was already imported (job #${existing.id}, status: ${existing.status}).`,
+        `Duplicate detected. Already imported (job #${existing.id}, status: ${existing.status}).`,
         { existingJobId: existing.id },
         "DUPLICATE"
       );
     }
 
-    if (pageCount === 0) {
-      return err(
-        "PDF has 0 pages or contains no extractable text. Please check the file.",
-        null,
-        "UNSUPPORTED_FORMAT"
-      );
-    }
-
-    // Find or create the source
+    // ── Create source + job ───────────────────────────────────────────────
     const source = sourceRepository.findOrCreate(input.sourceName);
-
-    // Create the import job
     const job = importJobRepository.create({
       fileName: input.fileName,
       fileSize: fileSizeBytes,
@@ -111,7 +150,6 @@ export const importService = {
     });
 
     if (!job) {
-      // Race condition — another request created a job with same hash
       return err("Import job creation failed (possible concurrent duplicate)", null, "DATABASE_ERROR");
     }
 
@@ -121,6 +159,7 @@ export const importService = {
       fileName: input.fileName,
       totalPages: pageCount,
       fileHash,
+      fileType,
       isDuplicate: false,
     });
   },
@@ -128,17 +167,20 @@ export const importService = {
   /**
    * STAGE 2 — Process Import
    *
-   * Runs the full PDF → AI → staging pipeline for a job.
-   * This is designed to run in a Next.js Route Handler (server-side).
-   * Reports progress to DB after each chunk.
+   * Runs the full extraction → staging pipeline for a job.
+   * Handles PDF, Image, and Text — all go through the same staging queue.
    *
-   * @param jobId    - ID of the import_job to process
-   * @param buffer   - Original PDF buffer (re-passed from the upload handler)
-   * @param onProgress - Optional callback for real-time progress updates
+   * @param jobId       - ID of the import_job to process
+   * @param fileBuffer  - Original file buffer (PDF or image); null for text imports
+   * @param mimeType    - MIME type of the file (e.g. "application/pdf")
+   * @param textContent - Raw text for text-type imports
+   * @param onProgress  - Optional callback for real-time progress updates
    */
   async processImport(
     jobId: number,
-    buffer: Buffer,
+    fileBuffer: Buffer | null,
+    mimeType: string,
+    textContent?: string,
     onProgress?: (progress: ImportJobProgress) => void
   ): Promise<Result<{ totalExtracted: number; totalSkipped: number }>> {
     const job = importJobRepository.findById(jobId);
@@ -150,22 +192,160 @@ export const importService = {
       return err(`Import job #${jobId} is already completed`, null, "VALIDATION_ERROR");
     }
 
-    // Mark as processing
     importJobRepository.markProcessing(jobId);
 
-    // Get settings for chunk size and AI limits
     const settings = settingsRepository.get();
-    const pagesPerChunk = settings.pdfChunkSize;
     const maxQuestionsPerChunk = settings.maxQuestionsPerChunk;
 
-    // Re-extract text (buffer is in-memory; no disk I/O)
-    const extractResult = await pdfProcessor.extractText(buffer);
+    let totalExtracted = job.extractedQuestions;
+    let totalSkipped = 0;
+    const allFailedPages: number[] = JSON.parse(job.failedPagesJson) as number[];
+
+    // ── Determine file type and build chunks ──────────────────────────────
+    const detectedType = fileBuffer ? detectFileType(mimeType) : "text";
+
+    if (!detectedType) {
+      importJobRepository.markFailed(jobId);
+      return err(`Unsupported MIME type: ${mimeType}`, null, "UNSUPPORTED_FORMAT");
+    }
+
+    // ── TEXT import ───────────────────────────────────────────────────────
+    if (detectedType === "text") {
+      const rawText = textContent ?? "";
+      if (!rawText.trim()) {
+        importJobRepository.markFailed(jobId);
+        return err("No text content provided for text import", null, "UNSUPPORTED_FORMAT");
+      }
+
+      const textResult = pdfProcessor.processText(rawText);
+      if (!textResult.success) {
+        importJobRepository.markFailed(jobId);
+        return textResult;
+      }
+
+      const { chunks } = textResult.data;
+
+      for (const chunk of chunks) {
+        if (settingsRepository.isAiRateLimitReached()) {
+          importJobRepository.markPaused(jobId);
+          return err(
+            `AI daily rate limit reached after ${totalExtracted} questions. Job paused.`,
+            { totalExtracted, totalSkipped, jobId },
+            "AI_RATE_LIMIT"
+          );
+        }
+
+        const aiResult = await geminiClient.extractQuestionsFromText(chunk.text);
+        settingsRepository.incrementAiCallCount();
+
+        if (!aiResult.success) {
+          allFailedPages.push(chunk.chunkIndex);
+          importJobRepository.updateProgress(jobId, {
+            currentPage: chunk.chunkIndex + 1,
+            failedPages: allFailedPages,
+            status: "processing",
+          });
+          continue;
+        }
+
+        const stageResult = stageQuestionsFromAiResponse(
+          aiResult.data,
+          jobId,
+          maxQuestionsPerChunk
+        );
+        totalExtracted += stageResult.inserted;
+        totalSkipped += stageResult.skipped;
+
+        importJobRepository.updateProgress(jobId, {
+          currentPage: chunk.chunkIndex + 1,
+          extractedQuestions: totalExtracted,
+          failedPages: allFailedPages,
+          status: "processing",
+        });
+
+        if (onProgress) {
+          const progress = importJobRepository.getProgress(jobId);
+          if (progress) onProgress(progress);
+        }
+      }
+
+      importJobRepository.markCompleted(jobId, totalExtracted);
+      return ok({ totalExtracted, totalSkipped });
+    }
+
+    // ── IMAGE import ──────────────────────────────────────────────────────
+    if (detectedType === "image") {
+      if (!fileBuffer) {
+        importJobRepository.markFailed(jobId);
+        return err("Image buffer is required for image import", null, "UNSUPPORTED_FORMAT");
+      }
+
+      const imageResult = pdfProcessor.processImage(fileBuffer, mimeType);
+      if (!imageResult.success) {
+        importJobRepository.markFailed(jobId);
+        return imageResult;
+      }
+
+      const chunk = imageResult.data;
+
+      if (settingsRepository.isAiRateLimitReached()) {
+        importJobRepository.markPaused(jobId);
+        return err(
+          "AI daily rate limit reached. Job paused — resume tomorrow.",
+          { jobId },
+          "AI_RATE_LIMIT"
+        );
+      }
+
+      const aiResult = await geminiClient.extractQuestionsFromImage(
+        chunk.base64Data,
+        chunk.mimeType
+      );
+      settingsRepository.incrementAiCallCount();
+
+      if (!aiResult.success) {
+        importJobRepository.markFailed(jobId);
+        return aiResult;
+      }
+
+      const stageResult = stageQuestionsFromAiResponse(
+        aiResult.data,
+        jobId,
+        maxQuestionsPerChunk
+      );
+      totalExtracted += stageResult.inserted;
+      totalSkipped += stageResult.skipped;
+
+      importJobRepository.updateProgress(jobId, {
+        currentPage: 1,
+        extractedQuestions: totalExtracted,
+        failedPages: allFailedPages,
+        status: "processing",
+      });
+
+      if (onProgress) {
+        const progress = importJobRepository.getProgress(jobId);
+        if (progress) onProgress(progress);
+      }
+
+      importJobRepository.markCompleted(jobId, totalExtracted);
+      return ok({ totalExtracted, totalSkipped });
+    }
+
+    // ── PDF import ────────────────────────────────────────────────────────
+    if (!fileBuffer) {
+      importJobRepository.markFailed(jobId);
+      return err("PDF buffer is required for PDF import", null, "UNSUPPORTED_FORMAT");
+    }
+
+    const extractResult = await pdfProcessor.extractText(fileBuffer);
     if (!extractResult.success) {
       importJobRepository.markFailed(jobId);
       return extractResult;
     }
 
     const { text: fullText, pageCount } = extractResult.data;
+    const pagesPerChunk = settings.pdfChunkSize;
     const chunks = pdfProcessor.chunkByPages(fullText, pageCount, pagesPerChunk);
 
     if (chunks.length === 0) {
@@ -173,18 +353,11 @@ export const importService = {
       return err("No text chunks could be created from this PDF", null, "UNSUPPORTED_FORMAT");
     }
 
-    // Determine resume point (for paused jobs)
     const resumeFromChunk = Math.floor(job.currentPage / pagesPerChunk);
 
-    let totalExtracted = job.extractedQuestions;
-    let totalSkipped = 0;
-    const allFailedPages: number[] = JSON.parse(job.failedPagesJson) as number[];
-
     for (const chunk of chunks) {
-      // Skip already-processed chunks when resuming
       if (chunk.chunkIndex < resumeFromChunk) continue;
 
-      // Check AI rate limit before every chunk
       if (settingsRepository.isAiRateLimitReached()) {
         importJobRepository.markPaused(jobId);
         return err(
@@ -195,20 +368,15 @@ export const importService = {
       }
 
       if (!chunk.text.trim()) {
-        // Empty chunk (image-only page, etc.) — skip silently
         allFailedPages.push(chunk.startPage);
         continue;
       }
 
-      // ── Call Gemini (Prompt 1) ─────────────────────────────────────────
       const aiResult = await geminiClient.extractQuestions(chunk.text);
       settingsRepository.incrementAiCallCount();
 
       if (!aiResult.success) {
-        // Non-fatal: mark these pages as failed, continue
-        for (let p = chunk.startPage; p <= chunk.endPage; p++) {
-          allFailedPages.push(p);
-        }
+        for (let p = chunk.startPage; p <= chunk.endPage; p++) allFailedPages.push(p);
         importJobRepository.updateProgress(jobId, {
           currentPage: chunk.endPage,
           failedPages: allFailedPages,
@@ -217,64 +385,15 @@ export const importService = {
         continue;
       }
 
-      // ── Parse + Validate AI Response ───────────────────────────────────
-      const parseResult = validationService.parseJson(aiResult.data);
-      if (!parseResult.success) {
-        for (let p = chunk.startPage; p <= chunk.endPage; p++) {
-          allFailedPages.push(p);
-        }
-        importJobRepository.updateProgress(jobId, {
-          currentPage: chunk.endPage,
-          failedPages: allFailedPages,
-        });
-        continue;
-      }
-
-      const validateResult = validationService.validateQuestionExtractorResponse(
-        parseResult.data
+      const stageResult = stageQuestionsFromAiResponse(
+        aiResult.data,
+        jobId,
+        maxQuestionsPerChunk
       );
-      if (!validateResult.success) {
-        for (let p = chunk.startPage; p <= chunk.endPage; p++) {
-          allFailedPages.push(p);
-        }
-        importJobRepository.updateProgress(jobId, {
-          currentPage: chunk.endPage,
-          failedPages: allFailedPages,
-        });
-        continue;
-      }
+      totalExtracted += stageResult.inserted;
+      totalSkipped += stageResult.skipped;
 
-      // Limit to maxQuestionsPerChunk
-      const validQuestions = validateResult.data.slice(0, maxQuestionsPerChunk);
-      const skippedInChunk = validateResult.data.length - validQuestions.length;
-      totalSkipped += skippedInChunk;
-
-      // ── Stage Questions ────────────────────────────────────────────────
-      const stageInputs = validQuestions.map((q) => ({
-        importJobId: jobId,
-        question: q.question,
-        options: {
-          A: q.optionA,
-          B: q.optionB,
-          C: q.optionC,
-          D: q.optionD,
-        },
-        answer: q.correctOption,
-        explanation: q.shortExplanation,
-        difficulty: q.difficulty,
-        topic: q.topic,
-        category: q.category,
-      }));
-
-      const inserted = stagedQuestionRepository.createMany(stageInputs);
-      totalExtracted += inserted;
-
-      // ── Persist progress to DB ─────────────────────────────────────────
-      const eta = estimateRemainingSeconds(
-        chunks.length,
-        chunk.chunkIndex,
-        chunks.length
-      );
+      const eta = estimateRemainingSeconds(chunks.length, chunk.chunkIndex);
       const updatedJob = importJobRepository.updateProgress(jobId, {
         currentPage: chunk.endPage,
         extractedQuestions: totalExtracted,
@@ -283,22 +402,17 @@ export const importService = {
         status: "processing",
       });
 
-      // Emit progress callback if provided
       if (onProgress && updatedJob) {
         const progress = importJobRepository.getProgress(jobId);
         if (progress) onProgress(progress);
       }
     }
 
-    // Mark job as completed
     importJobRepository.markCompleted(jobId, totalExtracted);
-
     return ok({ totalExtracted, totalSkipped });
   },
 
-  /**
-   * Returns a live progress snapshot for a running import job.
-   */
+  /** Returns a live progress snapshot for a running import job. */
   getProgress(jobId: number): Result<ImportJobProgress> {
     const progress = importJobRepository.getProgress(jobId);
     if (!progress) {
@@ -307,15 +421,13 @@ export const importService = {
     return ok(progress);
   },
 
-  /**
-   * Pauses a running import job.
-   */
+  /** Pauses a running import job. */
   pauseJob(jobId: number): Result<ImportJob> {
     const job = importJobRepository.findById(jobId);
     if (!job) return err(`Import job #${jobId} not found`, null, "NOT_FOUND");
     if (job.status !== "processing") {
       return err(
-        `Cannot pause job with status "${job.status}". Only processing jobs can be paused.`,
+        `Cannot pause job with status "${job.status}".`,
         null,
         "VALIDATION_ERROR"
       );
@@ -325,36 +437,23 @@ export const importService = {
     return ok(updated);
   },
 
-  /**
-   * Returns the full list of import jobs for the jobs dashboard.
-   */
+  /** Returns all import jobs for the dashboard. */
   listJobs() {
     return importJobRepository.findAll();
   },
 
-  /**
-   * Returns summary stats for the import jobs dashboard widget.
-   */
+  /** Returns summary stats for the import dashboard widget. */
   getJobStats() {
     return importJobRepository.getSummaryStats();
   },
 
-  /**
-   * Deletes an import job and all its staged questions.
-   * Only safe for completed / failed / paused jobs.
-   */
+  /** Deletes a job and all its staged questions. */
   deleteJob(jobId: number): Result<true> {
     const job = importJobRepository.findById(jobId);
     if (!job) return err(`Import job #${jobId} not found`, null, "NOT_FOUND");
-
     if (job.status === "processing") {
-      return err(
-        "Cannot delete a running import job. Pause it first.",
-        null,
-        "VALIDATION_ERROR"
-      );
+      return err("Cannot delete a running job. Pause it first.", null, "VALIDATION_ERROR");
     }
-
     stagedQuestionRepository.deleteByJobId(jobId);
     importJobRepository.delete(jobId);
     return ok(true);
@@ -363,12 +462,40 @@ export const importService = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function estimateRemainingSeconds(
-  totalChunks: number,
-  completedChunks: number,
-  _total: number
-): number {
-  // Assume ~8 seconds per chunk (Gemini API latency estimate)
+/**
+ * Parses + validates Gemini JSON, then inserts valid questions into staged_questions.
+ * Used by all three import paths (PDF, image, text) — single staging function.
+ */
+function stageQuestionsFromAiResponse(
+  rawJson: string,
+  jobId: number,
+  maxQuestionsPerChunk: number
+): { inserted: number; skipped: number } {
+  const parseResult = validationService.parseJson(rawJson);
+  if (!parseResult.success) return { inserted: 0, skipped: 0 };
+
+  const validateResult = validationService.validateQuestionExtractorResponse(parseResult.data);
+  if (!validateResult.success) return { inserted: 0, skipped: 0 };
+
+  const validQuestions = validateResult.data.slice(0, maxQuestionsPerChunk);
+  const skipped = validateResult.data.length - validQuestions.length;
+
+  const stageInputs = validQuestions.map((q) => ({
+    importJobId: jobId,
+    question: q.question,
+    options: { A: q.optionA, B: q.optionB, C: q.optionC, D: q.optionD },
+    answer: q.correctOption,
+    explanation: q.shortExplanation,
+    difficulty: q.difficulty,
+    topic: q.topic,
+    category: q.category,
+  }));
+
+  const inserted = stagedQuestionRepository.createMany(stageInputs);
+  return { inserted, skipped };
+}
+
+function estimateRemainingSeconds(totalChunks: number, completedChunks: number): number {
   const avgSecondsPerChunk = 8;
   const remaining = totalChunks - completedChunks - 1;
   return Math.max(0, remaining * avgSecondsPerChunk);

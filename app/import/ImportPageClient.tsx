@@ -1,280 +1,499 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 
-type Job = {
-  id: number; fileName: string; fileSize: number; status: string;
-  totalPages: number; currentPage: number; extractedQuestions: number;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ImportStartResult = {
+  jobId: number;
+  fileName: string;
+  totalPages: number;
+  fileType: string;
+};
+
+type ProcessResult = {
+  totalExtracted: number;
+  totalSkipped: number;
+};
+
+type JobEntry = {
+  id: number;
+  fileName: string;
+  status: string;
+  extractedQuestions: number;
+  totalPages: number;
   createdAt: string;
 };
-type JobStats = { total: number; queued: number; processing: number; completed: number; failed: number; paused: number; totalExtracted: number; };
+
+type JobsData = { jobs: JobEntry[]; stats: Record<string, number> };
+
+type ImportMode = "file" | "text";
+
+const ACCEPTED_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp", "image/jpg"];
+const ACCEPTED_EXT   = ".pdf,.png,.jpg,.jpeg,.webp";
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function ImportPageClient() {
+  // ── Upload state ──────────────────────────────────────────────────────
+  const [mode, setMode] = useState<ImportMode>("file");
+  const [file, setFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [textContent, setTextContent] = useState("");
+  const [sourceName, setSourceName] = useState("");
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [sourceName, setSourceName] = useState("");
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [stats, setStats] = useState<JobStats | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [currentJobId, setCurrentJobId] = useState<number | null>(null);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+
+  // ── Jobs list ─────────────────────────────────────────────────────────
+  const [jobsData, setJobsData] = useState<JobsData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchJobs = useCallback(async () => {
     const r = await fetch("/api/import");
-    if (r.ok) {
-      const d = await r.json() as { jobs: Job[]; stats: JobStats };
-      setJobs(d.jobs ?? []);
-      setStats(d.stats ?? null);
-    }
+    if (r.ok) setJobsData(await r.json() as JobsData);
   }, []);
 
-  // Fetch jobs on mount
-  useState(() => { void fetchJobs(); });
+  useEffect(() => {
+    void fetchJobs();
+  }, [fetchJobs]);
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const file = files[0]!;
-    if (file.type !== "application/pdf") { setError("Only PDF files are accepted."); return; }
-    if (file.size > 100 * 1024 * 1024) { setError("File exceeds 100 MB limit."); return; }
-    setPendingFile(file);
+  // ── Ctrl+V / Clipboard handler ────────────────────────────────────────
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      // Ignore if user is focused on textarea
+      if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
+      if ((e.target as HTMLElement).tagName === "INPUT") return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      // Check for image in clipboard
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          const blob = item.getAsFile();
+          if (blob) {
+            const imgFile = new File([blob], `clipboard-${Date.now()}.png`, { type: item.type });
+            handleFileSelected(imgFile);
+            return;
+          }
+        }
+      }
+
+      // Check for text in clipboard
+      for (const item of Array.from(items)) {
+        if (item.type === "text/plain") {
+          item.getAsString((text) => {
+            if (text.trim().length > 20) {
+              setMode("text");
+              setTextContent((prev) => (prev ? `${prev}\n\n${text}` : text));
+            }
+          });
+          return;
+        }
+      }
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
+  // ── File selection ────────────────────────────────────────────────────
+  const handleFileSelected = (f: File) => {
     setError("");
-    if (!sourceName) setSourceName(file.name.replace(/\.pdf$/i, "").replace(/[-_]/g, " "));
+    setSuccess("");
+
+    const type = f.type === "image/jpg" ? "image/jpeg" : f.type;
+    if (!ACCEPTED_TYPES.includes(type) && !ACCEPTED_TYPES.includes(f.type)) {
+      setError(`Unsupported file type: ${f.type}. Accepted: PDF, PNG, JPG, JPEG, WEBP`);
+      return;
+    }
+
+    setFile(f);
+    setMode("file");
+
+    // Generate preview for images
+    if (type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (e) => setImagePreview(e.target?.result as string);
+      reader.readAsDataURL(f);
+    } else {
+      setImagePreview(null);
+    }
   };
 
-  const handleUpload = async () => {
-    if (!pendingFile) return;
-    setUploading(true);
-    setError("");
+  // ── Drag & Drop ───────────────────────────────────────────────────────
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) handleFileSelected(f);
+  };
 
-    const fd = new FormData();
-    fd.append("file", pendingFile);
-    fd.append("source", sourceName || pendingFile.name);
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(true);
+  };
+
+  // ── Submit ────────────────────────────────────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (mode === "text" && !textContent.trim()) {
+      setError("Please paste or type some text to extract questions from.");
+      return;
+    }
+    if (mode === "file" && !file) {
+      setError("Please select or drop a file.");
+      return;
+    }
+
+    setUploading(true);
+    let startData: ImportStartResult;
 
     try {
-      const r = await fetch("/api/import", { method: "POST", body: fd });
-      const d = await r.json() as { jobId?: number; error?: string; code?: string };
+      // ── STAGE 1: Create import job ──────────────────────────────────
+      let startRes: Response;
 
-      if (!r.ok) {
-        setError(d.error ?? "Upload failed");
-        if (d.code === "DUPLICATE") setError(`⚠️ ${d.error}`);
+      if (mode === "text") {
+        startRes = await fetch("/api/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            textContent: textContent.trim(),
+            sourceName: sourceName || "Manual Paste",
+            fileName: `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
+          }),
+        });
+      } else {
+        const formData = new FormData();
+        formData.append("file", file!);
+        formData.append("source", sourceName || file!.name);
+        startRes = await fetch("/api/import", { method: "POST", body: formData });
+      }
+
+      const startJson = await startRes.json() as ImportStartResult & { error?: string; code?: string };
+
+      if (!startRes.ok) {
+        if (startJson.code === "DUPLICATE") {
+          setError("⚠️ This file was already imported. No duplicate created.");
+        } else {
+          setError(startJson.error ?? "Failed to start import.");
+        }
+        setUploading(false);
         return;
       }
 
-      setCurrentJobId(d.jobId!);
-      setSuccess(`Job #${d.jobId} created! Starting AI extraction…`);
-      setPendingFile(null);
-      setSourceName("");
-      void fetchJobs();
-
-      // Auto-start processing
+      startData = startJson;
+      setUploading(false);
       setProcessing(true);
-      const pfd = new FormData();
-      pfd.append("file", pendingFile);
-      const pr = await fetch(`/api/import/${d.jobId}/process`, { method: "POST", body: pfd });
-      const pd = await pr.json() as { totalExtracted?: number; error?: string; code?: string };
 
-      if (!pr.ok) {
-        setError(pd.code === "AI_RATE_LIMIT" ? "⚠️ AI daily limit reached. Job paused — resume tomorrow." : `Processing failed: ${pd.error}`);
+      // ── STAGE 2: Process (AI extraction) ────────────────────────────
+      let processRes: Response;
+
+      if (mode === "text") {
+        processRes = await fetch(`/api/import/${startData.jobId}/process`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ textContent: textContent.trim() }),
+        });
       } else {
-        setSuccess(`✅ Extracted ${pd.totalExtracted} questions! Go to Review to approve them.`);
+        const processForm = new FormData();
+        processForm.append("file", file!);
+        processRes = await fetch(`/api/import/${startData.jobId}/process`, {
+          method: "POST",
+          body: processForm,
+        });
       }
+
+      const pd = await processRes.json() as ProcessResult & { error?: string; code?: string };
+
+      if (!processRes.ok) {
+        if (pd.code === "AI_RATE_LIMIT") {
+          setError("⚠️ AI daily limit reached. Your job is saved — questions will be extracted tomorrow.");
+        } else {
+          setError(pd.error ?? "Extraction failed.");
+        }
+      } else {
+        setSuccess(
+          `✅ Extracted ${pd.totalExtracted} question${pd.totalExtracted !== 1 ? "s" : ""}!${pd.totalSkipped > 0 ? ` (${pd.totalSkipped} skipped — over limit)` : ""} Go to Review to approve them.`
+        );
+        // Reset form
+        setFile(null);
+        setImagePreview(null);
+        setTextContent("");
+      }
+
+      void fetchJobs();
     } catch {
       setError("Network error. Please try again.");
     } finally {
       setUploading(false);
       setProcessing(false);
-      void fetchJobs();
     }
   };
 
-  const statusIcon = (s: string) => ({
-    queued: "⏳", processing: "⚙️", completed: "✅", failed: "❌", paused: "⏸️"
-  }[s] ?? "❓");
+  const clearFile = () => {
+    setFile(null);
+    setImagePreview(null);
+    setError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const statusColor = (s: string) =>
+    s === "completed" ? "badge-green" : s === "failed" ? "badge-red" : s === "processing" ? "badge-blue" : "badge-gray";
+
+  const isLoading = uploading || processing;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      {/* Header */}
       <div className="page-header">
         <div className="page-header-left">
-          <h1 className="page-title">Import PDFs 📥</h1>
-          <p className="page-subtitle">Upload SSC exam PDFs to extract MCQ questions with AI.</p>
+          <h1 className="page-title">Import 📥</h1>
+          <p className="page-subtitle">Paste text, upload a PDF, or add a screenshot to extract MCQs.</p>
         </div>
       </div>
 
-      {/* Stats Bar */}
-      {stats && stats.total > 0 && (
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          {[
-            { label: "Total Jobs", value: stats.total, color: "var(--text-primary)" },
-            { label: "Processing", value: stats.processing, color: "var(--info)" },
-            { label: "Completed", value: stats.completed, color: "var(--success)" },
-            { label: "Failed", value: stats.failed, color: "var(--danger)" },
-            { label: "Questions Extracted", value: stats.totalExtracted, color: "var(--primary)" },
-          ].map((s) => (
-            <div key={s.label} className="card" style={{ flex: "1 1 140px", padding: "14px 18px" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, marginTop: 2 }}>{s.label}</div>
-            </div>
-          ))}
+      {/* ── Import Form ── */}
+      <div className="card">
+        {/* Mode Tabs */}
+        <div className="tabs" style={{ marginBottom: 20 }}>
+          <button
+            className={`tab ${mode === "file" ? "active" : ""}`}
+            onClick={() => setMode("file")}
+            type="button"
+          >
+            📎 File / Screenshot
+          </button>
+          <button
+            className={`tab ${mode === "text" ? "active" : ""}`}
+            onClick={() => setMode("text")}
+            type="button"
+          >
+            📝 Paste Text
+          </button>
         </div>
-      )}
 
-      <div className="grid-2">
-        {/* Upload Zone */}
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid var(--border)" }}>
-            <div className="section-title">New Import</div>
-          </div>
-          <div style={{ padding: 20 }}>
-            <div
-              className={`upload-zone ${dragging ? "dragging" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <div className="upload-icon">{pendingFile ? "📄" : "☁️"}</div>
-              <div className="upload-title">
-                {pendingFile ? pendingFile.name : "Drop your PDF here"}
-              </div>
-              <div className="upload-hint">
-                {pendingFile
-                  ? `${(pendingFile.size / 1024 / 1024).toFixed(2)} MB — Click to change`
-                  : "or click to browse · PDF only · max 100 MB"}
-              </div>
-            </div>
-            <input ref={fileInputRef} type="file" accept=".pdf" hidden onChange={(e) => handleFiles(e.target.files)} />
+        <form onSubmit={(e) => void handleSubmit(e)} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-            {pendingFile && (
-              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4, display: "block" }}>
-                    Source Name (optional)
-                  </label>
-                  <input
-                    className="input"
-                    placeholder="e.g., CGL 2023 Tier-1"
-                    value={sourceName}
-                    onChange={(e) => setSourceName(e.target.value)}
-                  />
-                </div>
-                <button
-                  className="btn btn-primary"
-                  style={{ width: "100%" }}
-                  onClick={handleUpload}
-                  disabled={uploading || processing}
-                >
-                  {uploading ? <><div className="spinner" />Uploading…</> :
-                   processing ? <><div className="spinner" />Extracting questions…</> :
-                   "🚀 Upload & Extract"}
-                </button>
-              </div>
-            )}
-
-            {error && (
-              <div style={{ marginTop: 12, padding: "10px 14px", background: "#fff5f5", border: "1px solid var(--danger)", borderRadius: "var(--radius-sm)", fontSize: 13, color: "var(--danger)" }}>
-                {error}
-              </div>
-            )}
-            {success && (
-              <div style={{ marginTop: 12, padding: "10px 14px", background: "#f0fdf4", border: "1px solid var(--success)", borderRadius: "var(--radius-sm)", fontSize: 13, color: "#1a7d35" }}>
-                {success}
-                {currentJobId && (
-                  <Link href={`/import/${currentJobId}/review`} className="btn btn-sm btn-primary" style={{ marginLeft: 12 }}>
-                    Review →
-                  </Link>
+          {/* File Mode */}
+          {mode === "file" && (
+            <>
+              {/* Drop Zone */}
+              <div
+                className={`drop-zone ${dragging ? "dragging" : ""} ${file ? "has-file" : ""}`}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onDragLeave={() => setDragging(false)}
+                onClick={() => !file && fileInputRef.current?.click()}
+              >
+                {file ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                    {imagePreview ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        style={{ maxHeight: 200, maxWidth: "100%", borderRadius: "var(--radius-md)", objectFit: "contain" }}
+                      />
+                    ) : (
+                      <div style={{ fontSize: 40 }}>📄</div>
+                    )}
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{file.name}</div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                        {(file.size / 1024).toFixed(0)} KB · {file.type}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={(e) => { e.stopPropagation(); clearFile(); }}
+                    >
+                      ✕ Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontSize: 44 }}>📁</div>
+                    <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>
+                      Paste Text, Upload PDF, or Add Screenshot
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                      Drag & drop here · Click to browse · <kbd style={{ padding: "2px 6px", background: "var(--surface-2)", borderRadius: 4, fontSize: 11 }}>Ctrl+V</kbd> to paste screenshot
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
+                      {["PDF", "PNG", "JPG", "JPEG", "WEBP"].map((t) => (
+                        <span key={t} style={{ padding: "3px 10px", background: "var(--surface-2)", borderRadius: "var(--radius-full)", fontSize: 11, fontWeight: 600, color: "var(--text-muted)" }}>{t}</span>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED_EXT}
+                style={{ display: "none" }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelected(f); }}
+              />
+              {!file && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ alignSelf: "flex-start" }}
+                >
+                  📂 Browse Files
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Text Mode */}
+          {mode === "text" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
+                Paste your MCQs, study notes, or any exam content below:
+              </label>
+              <textarea
+                className="input"
+                placeholder={`Paste or type content here. Examples:\n\n1. Which gas is most abundant in Earth's atmosphere?\n   A) Oxygen   B) Nitrogen   C) Carbon Dioxide   D) Argon\n   Answer: B\n\nOr paste multiple questions at once.\nOr paste full exam PDFs you copied.`}
+                value={textContent}
+                onChange={(e) => setTextContent(e.target.value)}
+                rows={12}
+                style={{ fontFamily: "monospace", fontSize: 13, resize: "vertical", minHeight: 200 }}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                  {textContent.length.toLocaleString()} characters · {textContent.split("\n").length} lines
+                </span>
+                {textContent && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTextContent("")}>
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Source Name */}
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+              Source Name <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span>
+            </label>
+            <input
+              className="input"
+              placeholder={mode === "text" ? 'e.g. "CGL 2023 Practice Set" or "Notes from class"' : 'e.g. "CGL 2023 Tier-1 Paper"'}
+              value={sourceName}
+              onChange={(e) => setSourceName(e.target.value)}
+              style={{ maxWidth: 420 }}
+            />
+          </div>
+
+          {/* Error / Success */}
+          {error && (
+            <div style={{ padding: "12px 16px", background: "#fff5f5", border: "1px solid var(--danger)", borderRadius: "var(--radius-sm)", color: "var(--danger)", fontSize: 14 }}>
+              {error}
+            </div>
+          )}
+          {success && (
+            <div style={{ padding: "12px 16px", background: "#f0fdf4", border: "1px solid var(--success)", borderRadius: "var(--radius-sm)", color: "var(--success)", fontSize: 14 }}>
+              {success}
+            </div>
+          )}
+
+          {/* Submit */}
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={isLoading || (mode === "file" ? !file : !textContent.trim())}
+            >
+              {uploading ? (
+                <><div className="spinner" /> Creating job…</>
+              ) : processing ? (
+                <><div className="spinner" /> Extracting with AI…</>
+              ) : (
+                "🚀 Extract Questions"
+              )}
+            </button>
+            {isLoading && (
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                {uploading ? "Uploading…" : "Gemini is reading your content. This may take 15–30 seconds."}
+              </div>
             )}
           </div>
-        </div>
+        </form>
 
-        {/* How it works */}
-        <div className="card">
-          <div className="section-title" style={{ marginBottom: 16 }}>How it works</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {[
-              { step: "1", icon: "📄", title: "Upload PDF", desc: "Drop any SSC exam PDF — question papers, practice sets, books." },
-              { step: "2", icon: "🤖", title: "AI Extracts MCQs", desc: "Gemini reads each page chunk and extracts structured MCQ data." },
-              { step: "3", icon: "👁️", title: "Review Questions", desc: "Approve, reject, or edit each question in the staging area." },
-              { step: "4", icon: "📚", title: "Promote to Bank", desc: "Approved questions go to the question bank with topics auto-created." },
-            ].map((s) => (
-              <div key={s.step} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: "50%",
-                  background: "var(--primary-light)", border: "2px solid var(--primary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 12, fontWeight: 800, color: "var(--primary)", flexShrink: 0
-                }}>{s.step}</div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{s.icon} {s.title}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{s.desc}</div>
-                </div>
-              </div>
-            ))}
+        {/* Ctrl+V hint */}
+        {mode === "file" && !file && (
+          <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--surface-2)", borderRadius: "var(--radius-sm)", fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 8, alignItems: "center" }}>
+            <span>💡</span>
+            <span>
+              <strong>Pro tip:</strong> Take a screenshot of any exam question and press{" "}
+              <kbd style={{ padding: "1px 5px", background: "var(--border)", borderRadius: 3, fontSize: 11 }}>Ctrl+V</kbd>{" "}
+              anywhere on this page to instantly import it.
+            </span>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Jobs List */}
-      {jobs.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <span className="section-title">Import History</span>
-            <button className="btn btn-ghost btn-sm" onClick={fetchJobs}>↺ Refresh</button>
+      {/* ── Job History ── */}
+      <div className="card">
+        <div className="card-header">
+          <span className="section-title">📋 Import History</span>
+          <button className="btn btn-ghost btn-sm" onClick={() => void fetchJobs()}>↺ Refresh</button>
+        </div>
+
+        {!jobsData || jobsData.jobs.length === 0 ? (
+          <div className="empty-state" style={{ padding: "28px 0" }}>
+            <div className="empty-icon">📭</div>
+            <div className="empty-title">No imports yet</div>
+            <div className="empty-desc">Upload a PDF, paste a screenshot, or type your MCQs above to get started.</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            {jobs.map((job, i) => (
-              <div key={job.id} style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "13px 4px",
-                borderBottom: i < jobs.length - 1 ? "1px solid var(--border)" : "none",
-              }}>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {jobsData.jobs.map((job) => (
+              <div key={job.id} className="job-card">
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: 20 }}>{statusIcon(job.status)}</span>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>
+                    {job.fileName.startsWith("Text Import") ? "📝" :
+                     job.fileName.match(/\.(png|jpg|jpeg|webp)$/i) ? "🖼️" : "📄"}
+                  </span>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {job.fileName}
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      {job.totalPages} pages · {job.extractedQuestions} questions extracted
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                      Job #{job.id} · {new Date(job.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      {job.totalPages > 1 ? ` · ${job.totalPages} pages` : ""}
                     </div>
-                    {job.status === "processing" && (
-                      <div style={{ marginTop: 6, width: 200 }}>
-                        <div className="progress-bar-wrap">
-                          <div className="progress-bar"
-                            style={{ width: `${job.totalPages > 0 ? Math.round((job.currentPage / job.totalPages) * 100) : 0}%` }} />
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                  <span className={`badge status-${job.status}`}
-                    style={{ background: "var(--surface-2)", color: "var(--text-secondary)" }}>
-                    {job.status}
-                  </span>
-                  {(job.status === "completed" || job.status === "paused") && (
-                    <Link href={`/import/${job.id}/review`} className="btn btn-sm btn-secondary">
-                      Review
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                  <span className={`badge ${statusColor(job.status)}`}>{job.status}</span>
+                  {job.extractedQuestions > 0 && (
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)" }}>
+                      {job.extractedQuestions} Qs
+                    </span>
+                  )}
+                  {job.status === "completed" && (
+                    <Link href={`/import/${job.id}/review`} className="btn btn-primary btn-sm">
+                      Review →
                     </Link>
                   )}
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {jobs.length === 0 && (
-        <div className="empty-state">
-          <div className="empty-icon">📂</div>
-          <div className="empty-title">No imports yet</div>
-          <div className="empty-desc">Upload your first SSC PDF to get started with question extraction.</div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

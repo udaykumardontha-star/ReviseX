@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { importService } from "@/services";
 
 export const runtime = "nodejs";
-export const maxDuration = 300; // 5 min — Gemini calls can take time
+export const maxDuration = 300; // 5 min — Gemini vision + PDF calls can take time
 
 export async function POST(
   req: NextRequest,
@@ -15,15 +15,46 @@ export async function POST(
   }
 
   try {
+    const contentType = req.headers.get("content-type") ?? "";
+
+    // ── TEXT import — JSON body ──────────────────────────────────────────
+    if (contentType.includes("application/json")) {
+      const body = await req.json() as { textContent?: string };
+      const textContent = body.textContent?.trim();
+      if (!textContent) {
+        return NextResponse.json({ error: "textContent required" }, { status: 400 });
+      }
+
+      const result = await importService.processImport(
+        jobId,
+        null,          // no file buffer for text imports
+        "text/plain",
+        textContent
+      );
+
+      if (!result.success) {
+        const statusCode = result.code === "AI_RATE_LIMIT" ? 429 : 500;
+        return NextResponse.json({ error: result.error, code: result.code }, { status: statusCode });
+      }
+      return NextResponse.json(result.data);
+    }
+
+    // ── FILE import — multipart/form-data (PDF or image) ─────────────────
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "PDF file required for processing" }, { status: 400 });
+      return NextResponse.json({ error: "File required for processing" }, { status: 400 });
     }
 
+    const mimeType = file.type === "image/jpg" ? "image/jpeg" : file.type;
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await importService.processImport(jobId, buffer);
+
+    const result = await importService.processImport(
+      jobId,
+      buffer,
+      mimeType
+    );
 
     if (!result.success) {
       const statusCode = result.code === "AI_RATE_LIMIT" ? 429 : 500;
