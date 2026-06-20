@@ -9,15 +9,16 @@ export async function POST(
   const id = parseInt(idStr, 10);
   if (isNaN(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
-  const action = req.nextUrl.pathname.includes("/approve") ? "approve" : "reject";
+  // Read action from query param: ?action=reject → reject, anything else → approve
+  const action = req.nextUrl.searchParams.get("action") === "reject" ? "reject" : "approve";
 
   if (action === "approve") {
     const result = stagingService.approveQuestion(id);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 404 });
     return NextResponse.json(result.data);
   } else {
-    const body = await req.json().catch(() => ({})) as { note?: string };
-    const result = stagingService.rejectQuestion(id, body.note);
+    const body = await req.json().catch(() => ({}) as { note?: string });
+    const result = stagingService.rejectQuestion(id, (body as { note?: string }).note);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 404 });
     return NextResponse.json(result.data);
   }

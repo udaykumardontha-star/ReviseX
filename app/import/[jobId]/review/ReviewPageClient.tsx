@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 
 type StagedQuestion = {
@@ -17,36 +17,105 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [loading, setLoading] = useState(true);
   const [promoting, setPromoting] = useState(false);
+  const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
+  // Prevent double-fetch when filter/page change triggers re-render from data setState
+  const fetchingRef = useRef(false);
 
   const showToast = (msg: string, type = "success") => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
-  const fetchQueue = useCallback(async () => {
-    setLoading(true);
-    const r = await fetch(`/api/staging/${jobId}?page=${page}&pageSize=15${statusFilter !== "all" ? `&status=${statusFilter}` : ""}`);
-    if (r.ok) setData(await r.json() as QueueData);
-    setLoading(false);
+  const fetchQueue = useCallback(async (silent = false) => {
+    if (fetchingRef.current && !silent) return;
+    fetchingRef.current = true;
+    if (!silent) setLoading(true);
+    try {
+      const r = await fetch(
+        `/api/staging/${jobId}?page=${page}&pageSize=20${statusFilter !== "all" ? `&status=${statusFilter}` : ""}`
+      );
+      if (r.ok) setData(await r.json() as QueueData);
+    } catch { /* ignore */ }
+    finally {
+      setLoading(false);
+      fetchingRef.current = false;
+    }
   }, [jobId, page, statusFilter]);
 
+  // Fetch on mount and when filter/page changes — stable dependency array prevents loops
   useEffect(() => { void fetchQueue(); }, [fetchQueue]);
 
+  // ── Approve a single question (optimistic update) ────────────────────────
   const approve = async (id: number) => {
-    await fetch(`/api/staging/question/${id}`, { method: "POST" });
-    void fetchQueue();
+    // Optimistic: flip status in local state immediately
+    setData((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.map((q) =>
+        q.id === id ? { ...q, status: "approved" as const } : q
+      );
+      const stats = {
+        ...prev.stats,
+        pending: Math.max(0, prev.stats.pending - 1),
+        approved: prev.stats.approved + 1,
+      };
+      return { ...prev, items, stats };
+    });
+
+    setActionLoading((p) => ({ ...p, [id]: true }));
+    try {
+      // No ?action param → defaults to "approve"
+      const r = await fetch(`/api/staging/question/${id}`, { method: "POST" });
+      if (!r.ok) {
+        showToast("Failed to approve question", "error");
+        void fetchQueue(); // revert optimistic if server failed
+      }
+    } catch {
+      showToast("Network error", "error");
+      void fetchQueue();
+    } finally {
+      setActionLoading((p) => ({ ...p, [id]: false }));
+    }
   };
 
+  // ── Reject a single question (optimistic update) ─────────────────────────
   const reject = async (id: number) => {
-    await fetch(`/api/staging/question/${id}?action=reject`, { method: "POST" });
-    void fetchQueue();
+    setData((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.map((q) =>
+        q.id === id ? { ...q, status: "rejected" as const } : q
+      );
+      const stats = {
+        ...prev.stats,
+        pending: Math.max(0, prev.stats.pending - 1),
+        rejected: prev.stats.rejected + 1,
+      };
+      return { ...prev, items, stats };
+    });
+
+    setActionLoading((p) => ({ ...p, [id]: true }));
+    try {
+      const r = await fetch(`/api/staging/question/${id}?action=reject`, { method: "POST" });
+      if (!r.ok) {
+        showToast("Failed to reject question", "error");
+        void fetchQueue();
+      }
+    } catch {
+      showToast("Network error", "error");
+      void fetchQueue();
+    } finally {
+      setActionLoading((p) => ({ ...p, [id]: false }));
+    }
   };
 
   const approveAll = async () => {
-    await fetch(`/api/staging/${jobId}/approve-all`, { method: "POST" });
-    showToast("All pending questions approved!");
-    void fetchQueue();
+    const r = await fetch(`/api/staging/${jobId}/approve-all`, { method: "POST" });
+    if (r.ok) {
+      showToast(`✅ All pending questions approved!`);
+      void fetchQueue();
+    } else {
+      showToast("Failed to approve all", "error");
+    }
   };
 
   const rejectAll = async () => {
@@ -61,18 +130,21 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
     const d = await r.json() as { promoted?: number; skipped?: number; topicsCreated?: number; error?: string };
     setPromoting(false);
     if (r.ok) {
-      showToast(`✅ Promoted ${d.promoted} questions! ${d.topicsCreated} new topics created.`);
+      showToast(`✅ Promoted ${d.promoted ?? 0} questions! ${d.topicsCreated ?? 0} new topics.`);
+      void fetchQueue();
     } else {
-      showToast(`❌ ${d.error}`, "error");
+      showToast(`❌ ${d.error ?? "Promote failed"}`, "error");
     }
-    void fetchQueue();
   };
 
   const stats = data?.stats;
-  const totalPages = data ? Math.ceil(data.total / data.pageSize) : 1;
+  const totalPages = data ? Math.ceil(data.total / (data.pageSize || 20)) : 1;
 
   const difficultyColor = (d: string) =>
     d === "easy" ? "badge-green" : d === "hard" ? "badge-red" : "badge-amber";
+
+  // Items to render — if pending filter, also show newly approved/rejected items in session
+  const items = data?.items ?? [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -80,7 +152,7 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
       <div className="page-header">
         <div className="page-header-left">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Link href="/import" style={{ fontSize: 13, color: "var(--text-muted)" }}>← Import</Link>
+            <Link href="/import" style={{ fontSize: 13, color: "var(--primary)", fontWeight: 600 }}>← Import</Link>
             <span style={{ color: "var(--border)" }}>/</span>
             <span style={{ fontSize: 13, fontWeight: 600 }}>Job #{jobId} Review</span>
           </div>
@@ -127,29 +199,39 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
             {f.charAt(0).toUpperCase() + f.slice(1)}
           </button>
         ))}
+        {loading && <div className="spinner" style={{ marginLeft: "auto" }} />}
       </div>
 
       {/* Questions */}
-      {loading ? (
+      {loading && items.length === 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {[1,2,3].map((i) => (
-            <div key={i} className="skeleton" style={{ height: 180 }} />
-          ))}
+          {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 180 }} />)}
         </div>
-      ) : data && data.items.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">🎉</div>
-          <div className="empty-title">No {statusFilter} questions</div>
-          <div className="empty-desc">
-            {statusFilter === "pending" ? "All questions have been reviewed!" : "Nothing here yet."}
+          <div className="empty-icon">{statusFilter === "pending" ? "🎉" : "📭"}</div>
+          <div className="empty-title">
+            {statusFilter === "pending" ? "All questions reviewed!" : `No ${statusFilter} questions`}
           </div>
+          <div className="empty-desc">
+            {statusFilter === "pending"
+              ? stats?.approved
+                ? `${stats.approved} approved — click "Promote to Bank" to add them to your question bank.`
+                : "Switch to All tab to see all questions."
+              : "Nothing here yet."}
+          </div>
+          {statusFilter === "pending" && !!stats?.approved && (
+            <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={promote} disabled={promoting}>
+              {promoting ? "Promoting…" : `🚀 Promote ${stats.approved} to Bank`}
+            </button>
+          )}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {data?.items.map((q) => (
+          {items.map((q) => (
             <div key={q.id} className={`review-card ${q.status}`}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                <div className="question-text">{q.question}</div>
+                <div className="question-text" style={{ flex: 1 }}>{q.question}</div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   <span className={`badge ${difficultyColor(q.difficulty)}`}>{q.difficulty}</span>
                   <span className="badge badge-gray">{q.category}</span>
@@ -175,8 +257,20 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
                 <div style={{ fontSize: 12, color: "var(--text-muted)" }}>📌 {q.topic}</div>
                 {q.status === "pending" && (
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button className="btn btn-sm btn-danger" onClick={() => reject(q.id)}>✕ Reject</button>
-                    <button className="btn btn-sm btn-primary" onClick={() => approve(q.id)}>✓ Approve</button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => reject(q.id)}
+                      disabled={!!actionLoading[q.id]}
+                    >
+                      {actionLoading[q.id] ? <div className="spinner" /> : "✕ Reject"}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => approve(q.id)}
+                      disabled={!!actionLoading[q.id]}
+                    >
+                      {actionLoading[q.id] ? <div className="spinner" /> : "✓ Approve"}
+                    </button>
                   </div>
                 )}
                 {q.status === "approved" && <span className="badge badge-green">✓ Approved</span>}
