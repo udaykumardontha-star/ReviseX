@@ -370,7 +370,7 @@ export const importService = {
       return err("No text chunks could be created from this PDF", null, "UNSUPPORTED_FORMAT");
     }
 
-    const resumeFromChunk = Math.floor(job.currentPage / pagesPerChunk);
+    const resumeFromChunk = job.currentPage;
 
     for (const chunk of chunks) {
       if (chunk.chunkIndex < resumeFromChunk) continue;
@@ -395,7 +395,7 @@ export const importService = {
       if (!aiResult.success) {
         for (let p = chunk.startPage; p <= chunk.endPage; p++) allFailedPages.push(p);
         await importJobRepository.updateProgress(jobId, {
-          currentPage: chunk.endPage,
+          currentPage: chunk.chunkIndex + 1,
           failedPages: allFailedPages,
           status: "processing",
         });
@@ -412,7 +412,7 @@ export const importService = {
 
       const eta = estimateRemainingSeconds(chunks.length, chunk.chunkIndex);
       const updatedJob = await importJobRepository.updateProgress(jobId, {
-        currentPage: chunk.endPage,
+        currentPage: chunk.chunkIndex + 1,
         extractedQuestions: totalExtracted,
         estimatedRemainingSeconds: eta,
         failedPages: allFailedPages,
