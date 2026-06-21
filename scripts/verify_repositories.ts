@@ -15,7 +15,7 @@ import { stagedQuestionRepository } from "../repositories/staged_question_reposi
 import { revisionSessionRepository } from "../repositories/revision_session_repository";
 
 async function run() {
-  console.log("\n🔍 ReviseX Repository Layer — Smoke Test\n");
+  console.log("\n🔍 NeomX Repository Layer — Smoke Test\n");
 
   // 1. Settings repository
   const settings = await settingsRepository.get();
@@ -96,3 +96,4 @@ run().catch(e => {
   console.error(e);
   process.exit(1);
 });
+

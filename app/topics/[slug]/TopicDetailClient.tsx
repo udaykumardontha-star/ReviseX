@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 type Topic = {
-  id: number; slug: string; name: string; category: string;
+  id: number; slug: string; name: string; category: string; chapter: string;
   topicStatus: string; totalQuestions: number;
   aliases: string[]; hasNote: boolean;
 };
@@ -136,6 +136,8 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
         <Link href="/topics" style={{ color: "var(--primary)", fontWeight: 600 }}>Topics</Link>
         <span>/</span>
         <span>{topic?.category ?? "…"}</span>
+        <span>/</span>
+        <span>{topic?.chapter ?? "…"}</span>
         <span>/</span>
         <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{topic?.name ?? slug}</span>
       </div>

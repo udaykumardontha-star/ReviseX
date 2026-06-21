@@ -489,6 +489,7 @@ async function stageQuestionsFromAiResponse(
     difficulty: q.difficulty,
     topic: q.topic,
     category: q.category,
+    chapter: q.chapter,
     examName: q.examName ?? null,
   }));
 

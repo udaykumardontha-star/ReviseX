@@ -39,6 +39,8 @@ const JSON_GENERATION_CONFIG = {
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
 
+import { VALID_CATEGORIES, VALID_CHAPTERS_BY_CATEGORY } from "@/db/schema";
+
 /**
  * Prompt 1 — Question Extractor
  *
@@ -52,19 +54,20 @@ const JSON_GENERATION_CONFIG = {
  */
 const QUESTION_EXTRACTOR_SYSTEM_PROMPT = `You are an SSC Exam Data Processor. Extract multiple-choice questions from the input into a valid JSON object. Follow these rules strictly:
 
-1. Categories MUST be exactly one of: Geography, History, Polity, Economy, Science, Environment, Art & Culture, Current Affairs, Miscellaneous.
-2. Topics must be highly specific (e.g., "Mughal Empire" not "History").
-3. correct_option must be exactly "A", "B", "C", or "D".
-4. difficulty must be exactly "easy", "medium", or "hard".
-5. short_explanation is MANDATORY for every question. Rules:
+1. Categories MUST be exactly one of: ${VALID_CATEGORIES.join(", ")}.
+2. You MUST assign a predefined 'chapter' for the selected category based on this strict mapping:
+${JSON.stringify(VALID_CHAPTERS_BY_CATEGORY, null, 2)}
+3. 'topic' must be highly specific and dynamically generated (e.g., "Mughal Architecture", "Cricket Terminology"). DO NOT just copy the chapter name.
+4. correct_option must be exactly "A", "B", "C", or "D".
+5. difficulty must be exactly "easy", "medium", or "hard".
+6. short_explanation is MANDATORY for every question. Rules:
    - Maximum 1-2 sentences of plain text.
    - Explain WHY the correct option is correct using a concrete fact.
    - No markdown, no bullet points, no lengthy theory.
-   - Example: "The Battle of Plassey (1757) marked the beginning of British rule in India, fought between the British East India Company and Siraj ud-Daulah."
-6. If the input is an image: read the text visible in the image and extract MCQs from it.
-7. If the text contains both Hindi and English (e.g. bilingual exam paper), completely IGNORE the Hindi part. Extract the question and options ONLY in English.
-8. If no MCQs are found, return {"questions": []}.
-9. Return ONLY valid JSON. No markdown, no explanation, no code fences.
+7. If the input is an image: read the text visible in the image and extract MCQs from it.
+8. If the text contains both Hindi and English (e.g. bilingual exam paper), completely IGNORE the Hindi part. Extract the question and options ONLY in English.
+9. If no MCQs are found, return {"questions": []}.
+10. Return ONLY valid JSON. No markdown, no explanation, no code fences.
 
 Output format:
 {
@@ -75,8 +78,9 @@ Output format:
       "correct_option": "A",
       "short_explanation": "Concise SSC-style explanation of why this answer is correct. One or two sentences max.",
       "difficulty": "medium",
-      "topic": "Specific topic name",
       "category": "Predefined category name",
+      "chapter": "Predefined chapter name from the mapping",
+      "topic": "Highly specific dynamic micro-topic name",
       "exam_name": "ONLY extract the exam name if it is explicitly mentioned in the text (e.g. 'SSC CGL 2023 Tier 1'). Do NOT guess or hallucinate. If not explicitly mentioned, omit this field or set to null."
     }
   ]
@@ -86,7 +90,7 @@ Output format:
  * Prompt 2 — Topic Revision Note Generator
  */
 const TOPIC_GENERATOR_SYSTEM_PROMPT = `You are an SSC Exam Tutor. Generate a comprehensive revision knowledge base for the given topic. Follow these rules strictly:
-1. category MUST be exactly one of: Geography, History, Polity, Economy, Science, Environment, Art & Culture, Current Affairs, Miscellaneous.
+1. category MUST be exactly one of: ${VALID_CATEGORIES.join(", ")}.
 2. keywords: 4–6 highly searchable lowercase keywords.
 3. key_facts: 10–20 atomic facts, each as "Fact → Detail".
 4. full_revision_note: A detailed, well-structured Markdown document (use ## headings, bullet points, tables where helpful). Minimum 500 words.
@@ -98,6 +102,7 @@ Output format:
 {
   "topic": "Standardized topic title",
   "category": "Predefined category name",
+  "chapter": "Predefined chapter name",
   "keywords": ["keyword1", "keyword2"],
   "key_facts": ["Fact 1 → Detail", "Fact 2 → Detail"],
   "ssc_traps": "Common traps description.",

@@ -103,7 +103,7 @@ export const settingsRepository = {
 
   /**
    * Rate limiting is DISABLED — always returns false.
-   * ReviseX uses the API key freely with no daily cap.
+   * NeomX uses the API key freely with no daily cap.
    */
   async isAiRateLimitReached(): Promise<boolean> {
     return false; // No rate limit enforced
@@ -124,3 +124,4 @@ export const settingsRepository = {
     };
   },
 } as const;
+

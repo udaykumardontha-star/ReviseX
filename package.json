@@ -1,8 +1,8 @@
 {
-  "name": "revisex",
+  "name": "NeomX",
   "version": "1.0.0",
   "private": true,
-  "description": "ReviseX — Premium SSC Exam Revision PWA",
+  "description": "NeomX — Premium SSC Exam Revision PWA",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -53,3 +53,4 @@
     "node": ">=20.0.0"
   }
 }
+

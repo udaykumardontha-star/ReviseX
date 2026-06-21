@@ -1,7 +1,7 @@
 /**
  * scripts/migrate.ts
  *
- * Custom migration runner for ReviseX.
+ * Custom migration runner for NeomX.
  * Applies Drizzle Kit generated migrations THEN the raw SQL files
  * for FTS5 virtual tables and triggers (which Drizzle cannot model).
  *
@@ -163,3 +163,4 @@ function parseSqlStatements(sql: string): string[] {
 
   return statements.filter((s) => s.length > 0);
 }
+

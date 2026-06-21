@@ -12,12 +12,12 @@ type Question = {
 };
 type ListData = { items: Question[]; total: number; page: number; pageSize: number };
 
-const CATEGORIES = ["All", "Geography", "History", "Polity", "Economy", "Science", "Environment", "Art & Culture", "Current Affairs", "Miscellaneous"];
+const CATEGORIES = ["All", "Geography", "History", "Polity", "Economy", "Science", "Static G.K.", "Current Affairs", "Miscellaneous"];
 const DIFFICULTIES = ["All", "easy", "medium", "hard"];
 const CATEGORY_COLORS: Record<string, string> = {
   Geography: "badge-blue", History: "badge-amber", Polity: "badge-purple",
-  Economy: "badge-green", Science: "badge-red", Environment: "badge-green",
-  "Art & Culture": "badge-purple", "Current Affairs": "badge-blue", Miscellaneous: "badge-gray",
+  Economy: "badge-green", Science: "badge-red", "Static G.K.": "badge-purple",
+  "Current Affairs": "badge-blue", Miscellaneous: "badge-gray",
 };
 const DIFF_COLOR: Record<string, string> = { easy: "badge-green", medium: "badge-amber", hard: "badge-red" };
 

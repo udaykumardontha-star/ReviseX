@@ -1,6 +1,6 @@
 {
-  "name": "ReviseX",
-  "short_name": "ReviseX",
+  "name": "NeomX",
+  "short_name": "NeomX",
   "description": "Premium SSC Exam Revision Platform — Study smarter, not harder.",
   "start_url": "/",
   "display": "standalone",
@@ -56,3 +56,4 @@
   ],
   "prefer_related_applications": false
 }
+

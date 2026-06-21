@@ -28,13 +28,74 @@ export const VALID_CATEGORIES = [
   "Polity",
   "Economy",
   "Science",
-  "Environment",
-  "Art & Culture",
+  "Static G.K.",
   "Current Affairs",
   "Miscellaneous",
 ] as const;
 
 export type ValidCategory = (typeof VALID_CATEGORIES)[number];
+
+export const VALID_CHAPTERS_BY_CATEGORY: Record<ValidCategory, readonly string[]> = {
+  "Static G.K.": [
+    "Dance", "Arts Personality", "Arts Awards", "Musical Instruments", "Festivals", "Fairs", 
+    "Songs", "Painting/Dress/Tribes", "First in India/World", "Sports", "Books and Authors", 
+    "Famous Personality", "Important Days", "States G.K.", "Organisation", "World G.K.", 
+    "Computer", "Full forms", "Religious Places", "Awards", "Important events", "Founder", 
+    "Schemes", "Miscellaneous"
+  ],
+  "History": [
+    "Prehistoric And Indus Valley", "Vedic Age", "Jainism", "Buddhism", "Mahajanapadas", 
+    "Mauryan Dynasty", "Gupta Dynasty", "Vardhana Dynasty", "Chola Dynasty", "Foreign Invasions", 
+    "Delhi Sultanate", "Slave Dynasty", "Khilji Dynasty", "Tughlaq Dynasty", "Sayyid Dynasty", 
+    "Lodi Dynasty", "Mughal Period", "Babur", "Humayun and Sher Shah Suri", "Akbar", "Jahangir", 
+    "Shah Jahan", "Aurangzeb", "Sikh Guru", "Maratha Empire", "Vijaynagar Empire", "Wars and Treaties", 
+    "The Revolt of 1857", "Governors and Viceroys", "British acts and Policies", 
+    "Partition of Bengal and Swadeshi Movements", "Gandhian Era", "Expansion of British Rule", 
+    "The Revolutionaries", "Struggle for Independence", "Socio Religious Reforms", 
+    "Indian National Congress and Its Sessions", "Muslim league", "Miscellaneous"
+  ],
+  "Polity": [
+    "Constitution", "Sources of Indian Constitution", "Article, Schedule, Parts and list", 
+    "Amendments", "Fundamental Rights and Duties", "Committee Reports", "Parliament", 
+    "President, Vice President and Prime Minister", "Judiciary", "Government Bodies", 
+    "Polity of neighbouring countries", "Miscellaneous"
+  ],
+  "Geography": [
+    "Solar system and its planets", "Longitudes and latitudes", "Continents and Oceans", 
+    "Neighbouring Countries of India", "Indian Drainage System", "World Drainage System", 
+    "Minerals and Energy Resources in India", "Agriculture", "Soil", "Vegetation", "Climate", 
+    "Industries", "Biosphere Reserves", "Physiographic Division of India", "Transportation", 
+    "Population", "Atmosphere", "Rocks", "Mountain", "Volcano", "World geography and Map", 
+    "Miscellaneous"
+  ],
+  "Economy": [
+    "Basics of Economy", "Concepts of Demand and Supply", "Cost, Production, Consumption and Market", 
+    "National Income, Inflation, Budget, Taxation and GDP", "Money Banking and Financial Institutions", 
+    "Navratna / Maharatna / PSUs", "International Organisations", "Government Schemes", 
+    "Five - Year Plans", "Indian Economy : Central Problems and Planning", 
+    "Stock, Debentures and Foreign trade", "Fiscal Policy and Monetary Policy", "Miscellaneous"
+  ],
+  "Science": [
+    "Light and Optics", "Heat and Thermodynamics", "Fluid Mechanics", "Electric Current and Its Effects", 
+    "Force and Pressure", "Sound", "Gravitation", "Work and Energy", "Wave", "Radioactivity", 
+    "Discoveries", "Units and Measurements", "Structure of Atom", "Metals, Non-metals and Alloys", 
+    "Acid, Bases and Salt", "Metallurgy", "Organic Chemistry", "Periodic table", "Ideal Gas Law", 
+    "Chemical Properties", "Solutions", "Chemistry in Everyday life", "Common Name", "Scientific Name", 
+    "Nutrition in Animals", "Nutrition in plants", "Deficiency and Diseases", "Reproduction in Animals", 
+    "Reproduction in Plants", "Cell: Basic Unit of life", "Sensory Organs", "Circulatory System", 
+    "Excretory System", "Endocrine/Exocrine system", "Respiratory system", "Digestive system", 
+    "Nervous system", "Skeleton system", "Plant Kingdom", "Animal Kingdom", "Micro organism", 
+    "Enzymes and Hormones", "Discoveries and Vaccines", "Scientific Study", "Miscellaneous"
+  ],
+  "Current Affairs": [
+    "Schemes", "Sports", "Appointments", "Awards", "Agreements and Mou", "Defence", 
+    "National Affairs", "International Affairs", "Science and Technology", "Books and Authors", 
+    "Portals and Apps", "Obituary", "Ranking and Index", "Important Days and Themes", "Miscellaneous"
+  ],
+  "Miscellaneous": [
+    "Miscellaneous"
+  ]
+};
 
 export const VALID_DIFFICULTIES = ["easy", "medium", "hard"] as const;
 export type ValidDifficulty = "easy" | "medium" | "hard";
@@ -162,6 +223,7 @@ export const topics = sqliteTable(
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     category: text("category").notNull(),
+    chapter: text("chapter").notNull().default("Miscellaneous"),
     topicStatus: text("topic_status", {
       enum: ["not_generated", "generated", "needs_refresh"],
     })
@@ -238,6 +300,7 @@ export const stagedQuestions = sqliteTable(
       .default("medium"),
     topic: text("topic").notNull(),
     category: text("category").notNull(),
+    chapter: text("chapter").notNull().default("Miscellaneous"),
     examName: text("exam_name"),
     status: text("status", { enum: ["pending", "approved", "rejected"] })
       .notNull()
