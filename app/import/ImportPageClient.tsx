@@ -630,6 +630,20 @@ export function ImportPageClient() {
                        Cancel
                      </button>
                   )}
+                  {job.status !== "processing" && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: "var(--danger)", padding: "0 6px" }}
+                      onClick={() => {
+                        if (confirm("Are you sure you want to delete this job? You can then re-upload the same file.")) {
+                          fetch(`/api/import/${job.id}`, { method: "DELETE" }).then(() => fetchJobs());
+                        }
+                      }}
+                      title="Delete Job"
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
