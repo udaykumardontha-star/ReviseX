@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { stagingService } from "@/services";
 
+export const maxDuration = 60; // Allow up to 60 seconds for bulk promotion
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
