@@ -22,7 +22,7 @@ import {
   stagedQuestionRepository,
   importJobRepository,
 } from "@/repositories";
-import type { QuestionFilterOptions, FtsSearchResult } from "@/repositories";
+import type { QuestionFilterOptions } from "@/repositories";
 import { hashQuestion } from "@/lib/utils/hasher";
 import { toSlug } from "@/lib/utils/slugifier";
 import { normalizeTopic } from "@/lib/utils/normalizer";
