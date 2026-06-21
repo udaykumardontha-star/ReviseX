@@ -660,14 +660,17 @@ export function ImportPageClient() {
                   )}
                   {(job.status === "processing" || job.status === "paused") && (
                      <div style={{ display: "flex", gap: 8 }}>
-                       <button
-                         className="btn btn-secondary btn-sm"
-                         style={{ padding: "0 8px" }}
-                         onClick={() => handleResume(job.id)}
-                         disabled={processing}
-                       >
-                         ▶️ Resume
-                       </button>
+                       {job.status === "paused" && (
+                         <button
+                           className="btn btn-secondary btn-sm"
+                           style={{ padding: "0 8px" }}
+                           onClick={() => handleResume(job.id)}
+                           disabled={processing}
+                           title="Resume job (e.g., after daily limit resets)"
+                         >
+                           ▶️ Resume
+                         </button>
+                       )}
                        {job.status === "processing" && (
                          <button
                            className="btn btn-ghost btn-sm"
