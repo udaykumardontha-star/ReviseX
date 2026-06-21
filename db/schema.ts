@@ -195,6 +195,7 @@ export const importJobs = sqliteTable(
     currentPage: integer("current_page").notNull().default(0),
     extractedQuestions: integer("extracted_questions").notNull().default(0),
     estimatedRemainingSeconds: integer("estimated_remaining_seconds"),
+    textContent: text("text_content"),
     failedPagesJson: text("failed_pages_json").notNull().default("[]"),
     forcedCategory: text("forced_category"),
     forcedChapter: text("forced_chapter"),

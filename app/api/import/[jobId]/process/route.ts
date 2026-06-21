@@ -19,11 +19,9 @@ export async function POST(
 
     // ── TEXT import — JSON body ──────────────────────────────────────────
     if (contentType.includes("application/json")) {
-      const body = await req.json() as { textContent?: string };
+      const bodyText = await req.text();
+      const body = bodyText ? JSON.parse(bodyText) as { textContent?: string } : {};
       const textContent = body.textContent?.trim();
-      if (!textContent) {
-        return NextResponse.json({ error: "textContent required" }, { status: 400 });
-      }
 
       const result = await importService.processImport(
         jobId,

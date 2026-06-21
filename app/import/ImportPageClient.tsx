@@ -289,13 +289,13 @@ export function ImportPageClient() {
 
         while (!pd.isCompleted) {
           let processRes: Response;
-          if (finalMode === "text") {
-            processRes = await fetch(`/api/import/${startData.jobId}/process`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ textContent: extractedPdfText || textContent.trim() }),
-            });
-          } else {
+            if (finalMode === "text") {
+              processRes = await fetch(`/api/import/${startData.jobId}/process`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+              });
+            } else {
             const processForm = new FormData();
             processForm.append("file", finalFile!);
             processRes = await fetch(`/api/import/${startData.jobId}/process`, {
@@ -339,6 +339,43 @@ export function ImportPageClient() {
     } finally {
       setUploading(false);
       setProcessing(false);
+    }
+  };
+
+  const handleResume = async (jobId: number) => {
+    setProcessing(true);
+    let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean } = { isCompleted: false, totalExtracted: 0, totalSkipped: 0 };
+    setError("");
+    setSuccess("");
+    
+    try {
+      while (!pd.isCompleted) {
+        const processRes = await fetch(`/api/import/${jobId}/process`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        
+        const processJson = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean };
+        if (!processRes.ok) {
+          if (processJson.code === "AI_RATE_LIMIT") {
+            setError(`⚠️ AI rate limit reached. Job paused.`);
+          } else {
+            setError(`Error processing job: ${processJson.error}`);
+          }
+          break;
+        }
+        pd = processJson;
+        await fetchJobs();
+      }
+      if (pd.isCompleted) {
+        setSuccess(`✅ Job resumed and completed successfully! Extracted ${pd.totalExtracted} questions.`);
+      }
+    } catch (e) {
+      setError("Network error while resuming job.");
+    } finally {
+      setProcessing(false);
+      void fetchJobs();
     }
   };
 
@@ -623,16 +660,28 @@ export function ImportPageClient() {
                       Review →
                     </Link>
                   )}
-                  {job.status === "processing" && (
-                     <button
-                       className="btn btn-ghost btn-sm"
-                       style={{ color: "var(--danger)" }}
-                       onClick={() => {
-                          fetch(`/api/import/${job.id}/cancel`, { method: "POST" }).then(() => fetchJobs());
-                       }}
-                     >
-                       Cancel
-                     </button>
+                  {(job.status === "processing" || job.status === "paused") && (
+                     <div style={{ display: "flex", gap: 8 }}>
+                       <button
+                         className="btn btn-secondary btn-sm"
+                         style={{ padding: "0 8px" }}
+                         onClick={() => handleResume(job.id)}
+                         disabled={processing}
+                       >
+                         ▶️ Resume
+                       </button>
+                       {job.status === "processing" && (
+                         <button
+                           className="btn btn-ghost btn-sm"
+                           style={{ color: "var(--danger)" }}
+                           onClick={() => {
+                              fetch(`/api/import/${job.id}/cancel`, { method: "POST" }).then(() => fetchJobs());
+                           }}
+                         >
+                           Cancel
+                         </button>
+                       )}
+                     </div>
                   )}
                   {job.status !== "processing" && (
                     <button

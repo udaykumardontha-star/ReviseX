@@ -149,6 +149,7 @@ export const importService = {
       fileHash,
       sourceId: source.id,
       totalPages: pageCount,
+      textContent: input.textContent,
     });
 
     if (!job) {
@@ -213,7 +214,7 @@ export const importService = {
 
     // ── TEXT import ───────────────────────────────────────────────────────
     if (detectedType === "text") {
-      const rawText = textContent ?? "";
+      const rawText = textContent ?? job.textContent ?? "";
       if (!rawText.trim()) {
         await importJobRepository.markFailed(jobId);
         return err("No text content provided for text import", null, "UNSUPPORTED_FORMAT");
