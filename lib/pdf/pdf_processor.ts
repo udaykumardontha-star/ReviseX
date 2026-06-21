@@ -133,26 +133,40 @@ export const pdfProcessor = {
     if (!fullText.trim() || totalPages === 0) return [];
 
     const charsPerPage = Math.ceil(fullText.length / Math.max(totalPages, 1));
-    const charsPerChunk = charsPerPage * pagesPerChunk;
-    const chunks: PdfChunk[] = [];
+    const MAX_CHARS_PER_CHUNK = 12000; // Cap to prevent hitting Gemini's 8192 token output limit
 
+    // If a standard chunk by pages is too large, we fall back to a safe character limit
+    const targetCharsPerChunk = Math.min(charsPerPage * pagesPerChunk, MAX_CHARS_PER_CHUNK);
+    
+    const chunks: PdfChunk[] = [];
     let chunkIndex = 0;
     let charOffset = 0;
-    let pageOffset = 1;
 
     while (charOffset < fullText.length) {
-      const chunkText = fullText.slice(charOffset, charOffset + charsPerChunk);
-      const estimatedEndPage = Math.min(pageOffset + pagesPerChunk - 1, totalPages);
+      let end = Math.min(charOffset + targetCharsPerChunk, fullText.length);
+
+      // Try to break at a paragraph boundary
+      if (end < fullText.length) {
+        const lastPara = fullText.lastIndexOf("\n\n", end);
+        if (lastPara > charOffset + targetCharsPerChunk / 2) {
+          end = lastPara + 2;
+        }
+      }
+
+      const chunkText = fullText.slice(charOffset, end);
+      
+      // Estimate which pages this chunk covers mathematically
+      const startPage = Math.min(Math.floor(charOffset / charsPerPage) + 1, totalPages);
+      const endPage = Math.min(Math.floor((end - 1) / charsPerPage) + 1, totalPages);
 
       chunks.push({
         chunkIndex,
-        startPage: pageOffset,
-        endPage: estimatedEndPage,
+        startPage,
+        endPage,
         text: chunkText.trim(),
       });
 
-      charOffset += charsPerChunk;
-      pageOffset = estimatedEndPage + 1;
+      charOffset = end;
       chunkIndex++;
     }
 
