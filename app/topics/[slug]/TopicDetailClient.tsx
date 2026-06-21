@@ -34,6 +34,7 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [revealed, setRevealed] = useState<Record<number, string>>({});
   const [toast, setToast] = useState<string>("");
+  const [localSearch, setLocalSearch] = useState("");
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
@@ -112,6 +113,22 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
   const diffColor = (d: string) =>
     d === "easy" ? "badge-green" : d === "hard" ? "badge-red" : "badge-amber";
 
+  const filteredQuestions = questions.filter(q => {
+    if (!localSearch) return true;
+    const s = localSearch.toLowerCase();
+    return q.question.toLowerCase().includes(s) || 
+           q.optionA.toLowerCase().includes(s) ||
+           q.optionB.toLowerCase().includes(s) ||
+           q.optionC.toLowerCase().includes(s) ||
+           q.optionD.toLowerCase().includes(s) ||
+           (q.shortExplanation && q.shortExplanation.toLowerCase().includes(s));
+  });
+
+  const filteredFacts = noteData?.facts.filter(f => {
+    if (!localSearch) return true;
+    return f.toLowerCase().includes(localSearch.toLowerCase());
+  }) ?? [];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Breadcrumb */}
@@ -163,16 +180,34 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
       )}
 
       {/* Tabs */}
-      <div className="tabs">
-        {[
-          { id: "note" as const, label: "📝 Revision Note" },
-          { id: "questions" as const, label: `❓ Questions (${topic?.totalQuestions ?? 0})` },
-          { id: "facts" as const, label: `💡 Key Facts (${noteData?.facts.length ?? 0})` },
-        ].map((t) => (
-          <button key={t.id} className={`tab ${activeTab === t.id ? "active" : ""}`} onClick={() => setActiveTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="tabs">
+          {[
+            { id: "note" as const, label: "📝 Revision Note" },
+            { id: "questions" as const, label: `❓ Questions (${topic?.totalQuestions ?? 0})` },
+            { id: "facts" as const, label: `💡 Key Facts (${noteData?.facts.length ?? 0})` },
+          ].map((t) => (
+            <button key={t.id} className={`tab ${activeTab === t.id ? "active" : ""}`} onClick={() => setActiveTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {(activeTab === "questions" || activeTab === "facts") && (
+          <div className="input-group" style={{ maxWidth: 400 }}>
+            <span className="input-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+            </span>
+            <input
+              className="input"
+              placeholder={`Search ${activeTab}...`}
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Note Tab */}
@@ -236,14 +271,14 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
       {activeTab === "questions" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {qLoading && Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 160 }} />)}
-          {!qLoading && questions.length === 0 && (
+          {!qLoading && filteredQuestions.length === 0 && (
             <div className="empty-state">
               <div className="empty-icon">❓</div>
-              <div className="empty-title">No questions yet</div>
-              <div className="empty-desc">Import a PDF and promote questions to see them here.</div>
+              <div className="empty-title">No questions found</div>
+              <div className="empty-desc">Try clearing your search or importing more questions.</div>
             </div>
           )}
-          {!qLoading && questions.map((q) => (
+          {!qLoading && filteredQuestions.map((q) => (
             <div key={q.id} className="question-card">
               <div className="question-card-header">
                 <div className="question-text-main">{q.question}</div>
@@ -289,14 +324,14 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
       {/* Facts Tab */}
       {activeTab === "facts" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {noteData?.facts.length === 0 || !noteData ? (
+          {filteredFacts.length === 0 || !noteData ? (
             <div className="empty-state">
               <div className="empty-icon">💡</div>
-              <div className="empty-title">No facts yet</div>
-              <div className="empty-desc">Generate a note first to see key facts.</div>
+              <div className="empty-title">No facts found</div>
+              <div className="empty-desc">Generate a note first or try clearing your search.</div>
             </div>
           ) : (
-            noteData.facts.map((fact, i) => (
+            filteredFacts.map((fact, i) => (
               <div key={i} className="fact-card" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                 <span style={{ fontSize: 18, flexShrink: 0 }}>💡</span>
                 <div className="fact-text">{fact}</div>
