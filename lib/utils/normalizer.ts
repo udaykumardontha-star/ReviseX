@@ -84,7 +84,53 @@ export function normalizeCategory(input: string): ValidCategory | null {
   );
   if (exact) return exact;
 
-  // Fuzzy: check if the input is a substring of a valid category
+  // Alias map for common AI output variations
+  const CATEGORY_ALIASES: Record<string, ValidCategory> = {
+    "static gk": "Static G.K.",
+    "static g.k": "Static G.K.",
+    "static general knowledge": "Static G.K.",
+    "general knowledge": "Static G.K.",
+    "gk": "Static G.K.",
+    "art and culture": "Static G.K.",
+    "art & culture": "Static G.K.",
+    "arts and culture": "Static G.K.",
+    "culture": "Static G.K.",
+    "dance": "Static G.K.",
+    "sports": "Static G.K.",
+    "indian history": "History",
+    "modern history": "History",
+    "ancient history": "History",
+    "medieval history": "History",
+    "world history": "History",
+    "indian polity": "Polity",
+    "governance": "Polity",
+    "constitution": "Polity",
+    "indian geography": "Geography",
+    "world geography": "Geography",
+    "physical geography": "Geography",
+    "indian economy": "Economy",
+    "economics": "Economy",
+    "economic": "Economy",
+    "biology": "Science",
+    "physics": "Science",
+    "chemistry": "Science",
+    "general science": "Science",
+    "current affairs": "Current Affairs",
+    "current events": "Current Affairs",
+    "english language": "English",
+    "english grammar": "English",
+    "vocabulary": "English",
+    "misc": "Miscellaneous",
+    "other": "Miscellaneous",
+    "others": "Miscellaneous",
+  };
+
+  // Check aliases
+  if (CATEGORY_ALIASES[normalized]) {
+    return CATEGORY_ALIASES[normalized];
+  }
+
+  // Fuzzy: check if the input is a substring of a valid category or vice-versa
   const fuzzy = VALID_CATEGORIES.find(
     (c) =>
       c.toLowerCase().includes(normalized) ||

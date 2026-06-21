@@ -208,9 +208,26 @@ export const validationService = {
       // Exact case-insensitive match
       let chapter = validChapters.find(c => c.toLowerCase() === rawChapterStr);
       
-      // Fuzzy match: check if raw string contains the valid chapter (e.g. "Folk Dance" contains "Dance")
-      if (!chapter) {
-        chapter = validChapters.find(c => rawChapterStr.includes(c.toLowerCase()));
+      // Fuzzy match: bidirectional contains check
+      // e.g. "Folk Dance" contains "Dance", OR "Dance" is contained in "Folk Dance of India"
+      if (!chapter && rawChapterStr.length >= 3) {
+        chapter = validChapters.find(c => {
+          const cl = c.toLowerCase();
+          return cl !== "miscellaneous" && (
+            rawChapterStr.includes(cl) || cl.includes(rawChapterStr)
+          );
+        });
+      }
+      
+      // Word overlap match: if 2+ words match between AI output and valid chapter
+      if (!chapter && rawChapterStr.length >= 3) {
+        const rawWords = rawChapterStr.split(/\s+/).filter(w => w.length >= 3);
+        chapter = validChapters.find(c => {
+          if (c === "Miscellaneous") return false;
+          const chapterWords = c.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+          const overlap = rawWords.filter(w => chapterWords.some(cw => cw.includes(w) || w.includes(cw)));
+          return overlap.length >= 1;
+        });
       }
       
       chapter = chapter || "Miscellaneous";
@@ -284,9 +301,25 @@ export const validationService = {
     // Exact case-insensitive match
     let chapter = validChapters.find(c => c.toLowerCase() === rawChapterStr);
     
-    // Fuzzy match
-    if (!chapter) {
-      chapter = validChapters.find(c => rawChapterStr.includes(c.toLowerCase()));
+    // Fuzzy match: bidirectional contains check
+    if (!chapter && rawChapterStr.length >= 3) {
+      chapter = validChapters.find(c => {
+        const cl = c.toLowerCase();
+        return cl !== "miscellaneous" && (
+          rawChapterStr.includes(cl) || cl.includes(rawChapterStr)
+        );
+      });
+    }
+    
+    // Word overlap match
+    if (!chapter && rawChapterStr.length >= 3) {
+      const rawWords = rawChapterStr.split(/\s+/).filter(w => w.length >= 3);
+      chapter = validChapters.find(c => {
+        if (c === "Miscellaneous") return false;
+        const chapterWords = c.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+        const overlap = rawWords.filter(w => chapterWords.some(cw => cw.includes(w) || w.includes(cw)));
+        return overlap.length >= 1;
+      });
     }
     
     chapter = chapter || "Miscellaneous";
