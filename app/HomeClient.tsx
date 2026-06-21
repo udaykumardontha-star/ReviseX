@@ -82,7 +82,7 @@ function SearchContent() {
 
   const getHref = (r: SearchResult) => {
     if (r.type === "topic" || r.type === "note") return `/topics/${r.slug}`;
-    return `/questions`;
+    return `/questions?q=${encodeURIComponent(r.title)}`;
   };
 
   return (
