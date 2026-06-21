@@ -50,7 +50,7 @@ export type QuestionSearchResult = {
 };
 
 export type FtsQuestionSearchResult = {
-  items: FtsSearchResult[];
+  items: QuestionWithTopic[];
   total: number;
   query: string;
 };

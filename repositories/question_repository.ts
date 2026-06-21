@@ -394,7 +394,7 @@ export const questionRepository = {
     query: string,
     limit: number = 20,
     offset: number = 0
-  ): Promise<FtsSearchResult[]> {
+  ): Promise<any[]> {
     if (!query.trim()) return [];
 
     // FTS5 query: escape special characters and add wildcard suffix
@@ -409,13 +409,17 @@ export const questionRepository = {
     try {
       const resultsObj = await rawSqlite.execute({
           sql: `SELECT
-            q.id,
-            q.question,
-            q.category,
-            qf.topic_name as topicName,
+            q.*,
+            t.name AS topicName,
+            t.slug AS topicSlug,
+            s.name AS sourceName,
+            CASE WHEN qb.id IS NOT NULL THEN 1 ELSE 0 END AS isBookmarked,
             rank
           FROM questions_fts qf
           JOIN questions q ON q.id = qf.rowid
+          JOIN topics t ON t.id = q.topic_id
+          JOIN sources s ON s.id = q.source_id
+          LEFT JOIN question_bookmarks qb ON qb.question_id = q.id
           WHERE questions_fts MATCH ?
             AND q.is_deleted = 0
           ORDER BY rank
@@ -423,7 +427,19 @@ export const questionRepository = {
           args: [ftsQuery, limit, offset]
       });
 
-      return resultsObj.rows as unknown as FtsSearchResult[];
+      return resultsObj.rows.map((r) => ({
+        ...r,
+        optionA: (r as any).option_a ?? r.optionA,
+        optionB: (r as any).option_b ?? r.optionB,
+        optionC: (r as any).option_c ?? r.optionC,
+        optionD: (r as any).option_d ?? r.optionD,
+        correctOption: (r as any).correct_option ?? r.correctOption,
+        shortExplanation: (r as any).short_explanation ?? r.shortExplanation,
+        examName: (r as any).exam_name ?? r.examName,
+        timesViewed: (r as any).times_viewed ?? r.timesViewed,
+        timesRevised: (r as any).times_revised ?? r.timesRevised,
+        isBookmarked: Boolean(r.isBookmarked),
+      })) as any[];
     } catch {
       return [];
     }
