@@ -35,7 +35,7 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
   const [bookmarkedOnly, setBookmarkedOnly] = useState(false);
   const [q, setQ] = useState(initialQ);
   const [page, setPage] = useState(1);
-  const [revealed, setRevealed] = useState<Record<number, boolean>>({});
+  const [revealed, setRevealed] = useState<Record<number, string>>({});
   const [bookmarks, setBookmarks] = useState<Record<number, boolean>>({});
   const pageSize = 20;
 
@@ -87,14 +87,14 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
     }
   };
 
-  const reveal = (id: number) => setRevealed((prev) => ({ ...prev, [id]: true }));
+  const reveal = (id: number, opt: string) => setRevealed((prev) => ({ ...prev, [id]: opt }));
   const totalPages = data ? Math.ceil(data.total / pageSize) : 1;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div className="page-header">
         <div className="page-header-left">
-          <h1 className="page-title">Question Bank ❓</h1>
+          <h1 className="page-title">Question Bank 📚</h1>
           <p className="page-subtitle">{data?.total ?? "…"} questions across all topics</p>
         </div>
       </div>
@@ -195,11 +195,19 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
                 <div className="question-options">
                   {(["A", "B", "C", "D"] as const).map((opt) => {
                     const text = ({ A: q.optionA, B: q.optionB, C: q.optionC, D: q.optionD })[opt];
+                    const selectedOpt = revealed[q.id];
+                    const isRevealed = !!selectedOpt;
                     const isCorrect = isRevealed && q.correctOption === opt;
+                    const isWrongSelection = isRevealed && selectedOpt === opt && !isCorrect;
+                    
+                    let className = "q-option";
+                    if (isCorrect) className += " correct-reveal";
+                    else if (isWrongSelection) className += " wrong-reveal";
+
                     return (
                       <div key={opt}
-                        className={`q-option ${isCorrect ? "correct-reveal" : ""}`}
-                        onClick={() => !isRevealed && reveal(q.id)}>
+                        className={className}
+                        onClick={() => !isRevealed && reveal(q.id, opt)}>
                         <span className="q-option-label">{opt}.</span>
                         <span>{text}</span>
                         {isCorrect && <span style={{ marginLeft: "auto", fontSize: 14 }}>✓</span>}

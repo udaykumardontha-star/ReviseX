@@ -101,8 +101,8 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
     showToast("✅ Session complete! Streak updated.");
   };
 
-  const reveal = (qId: number) => {
-    setRevealed((prev) => ({ ...prev, [qId]: "revealed" }));
+  const reveal = (qId: number, opt: string) => {
+    setRevealed((prev) => ({ ...prev, [qId]: opt }));
   };
 
   const CATEGORY_COLORS: Record<string, string> = {
@@ -292,16 +292,24 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
               <div className="question-options">
                 {(["A", "B", "C", "D"] as const).map((opt) => {
                   const optText = ({ A: q.optionA, B: q.optionB, C: q.optionC, D: q.optionD })[opt];
-                  const isRevealed = !!revealed[q.id];
-                  const isCorrect = q.correctOption === opt;
+                  const selectedOpt = revealed[q.id];
+                  const isRevealed = !!selectedOpt;
+                  const isCorrect = isRevealed && q.correctOption === opt;
+                  const isWrongSelection = isRevealed && selectedOpt === opt && !isCorrect;
+                  
+                  let className = "q-option";
+                  if (isCorrect) className += " correct-reveal";
+                  else if (isWrongSelection) className += " wrong-reveal";
+
                   return (
                     <div
                       key={opt}
-                      className={`q-option ${isRevealed && isCorrect ? "correct-reveal" : ""}`}
-                      onClick={() => !isRevealed && reveal(q.id)}
+                      className={className}
+                      onClick={() => !isRevealed && reveal(q.id, opt)}
                     >
                       <span className="q-option-label">{opt}.</span>
                       <span>{optText}</span>
+                      {isCorrect && <span style={{ marginLeft: "auto", fontSize: 14 }}>✓</span>}
                     </div>
                   );
                 })}
@@ -313,9 +321,9 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
               )}
               {!revealed[q.id] && (
                 <div style={{ marginTop: 8 }}>
-                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => reveal(q.id)}>
-                    Reveal Answer
-                  </button>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", paddingLeft: 8 }}>
+                    Click an option to reveal the answer
+                  </div>
                 </div>
               )}
             </div>
