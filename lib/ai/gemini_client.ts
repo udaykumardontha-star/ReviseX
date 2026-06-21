@@ -57,6 +57,7 @@ const QUESTION_EXTRACTOR_SYSTEM_PROMPT = `You are an SSC Exam Data Processor. Ex
 1. Categories MUST be exactly one of: ${VALID_CATEGORIES.join(", ")}.
 2. You MUST assign a predefined 'chapter' for the selected category based on this strict mapping:
 ${JSON.stringify(VALID_CHAPTERS_BY_CATEGORY, null, 2)}
+CRITICAL: The 'chapter' string MUST be an EXACT copy-paste from the array for your chosen category. DO NOT invent or rephrase chapters.
 3. 'topic' must be highly specific and dynamically generated (e.g., "Mughal Architecture", "Cricket Terminology"). DO NOT just copy the chapter name.
 4. correct_option must be exactly "A", "B", "C", or "D".
 5. difficulty must be exactly "easy", "medium", or "hard".
@@ -91,12 +92,15 @@ Output format:
  */
 const TOPIC_GENERATOR_SYSTEM_PROMPT = `You are an SSC Exam Tutor. Generate a comprehensive revision knowledge base for the given topic. Follow these rules strictly:
 1. category MUST be exactly one of: ${VALID_CATEGORIES.join(", ")}.
-2. keywords: 4–6 highly searchable lowercase keywords.
-3. key_facts: 10–20 atomic facts, each as "Fact → Detail".
-4. full_revision_note: A detailed, well-structured Markdown document (use ## headings, bullet points, tables where helpful). Minimum 500 words.
-5. quick_revision_card: 10–20 atomic bullet points for last-minute revision.
-6. ssc_traps: Common trick variations and examiner traps for this topic.
-7. Return ONLY valid JSON. No markdown code fences, no explanation outside JSON.
+2. chapter MUST be exactly chosen from the following mapping for the selected category:
+${JSON.stringify(VALID_CHAPTERS_BY_CATEGORY, null, 2)}
+CRITICAL: The 'chapter' string MUST be an EXACT copy-paste from the array for your chosen category. DO NOT invent or rephrase chapters.
+3. keywords: 4–6 highly searchable lowercase keywords.
+4. key_facts: 10–20 atomic facts, each as "Fact → Detail".
+5. full_revision_note: A detailed, well-structured Markdown document (use ## headings, bullet points, tables where helpful). Minimum 500 words.
+6. quick_revision_card: 10–20 atomic bullet points for last-minute revision.
+7. ssc_traps: Common trick variations and examiner traps for this topic.
+8. Return ONLY valid JSON. No markdown code fences, no explanation outside JSON.
 
 Output format:
 {
