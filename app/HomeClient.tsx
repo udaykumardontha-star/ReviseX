@@ -32,7 +32,13 @@ const TYPE_LABELS: Record<string, string> = {
   note: "Note",
 };
 
-function SearchContent() {
+const CATEGORY_COLORS: Record<string, string> = {
+  Geography: "badge-blue", History: "badge-amber", Polity: "badge-purple",
+  Economy: "badge-green", Science: "badge-red", "Static G.K.": "badge-purple",
+  "Current Affairs": "badge-blue", English: "badge-teal", Miscellaneous: "badge-gray",
+};
+
+export function SearchContent({ initialStats }: { initialStats?: { category: string; count: number }[] }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialQuery = searchParams.get("q") ?? "";
@@ -90,9 +96,37 @@ function SearchContent() {
       {/* Header */}
       <div className="page-header">
         <div className="page-header-left">
-          <h1 className="page-title">🔍 Search</h1>
+          <h1 className="page-title">📊 Dashboard</h1>
         </div>
       </div>
+
+      {/* Category Stats Widgets (Only show when not searching) */}
+      {!query && initialStats && initialStats.length > 0 && (
+        <div className="card" style={{ padding: "20px" }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Question Bank</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
+            {initialStats.map((stat) => (
+              <div key={stat.category} style={{
+                padding: "16px", 
+                borderRadius: "12px", 
+                border: "1px solid var(--border)", 
+                backgroundColor: "var(--bg-card)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center"
+              }}>
+                <span style={{ fontSize: 28, fontWeight: 700, color: "var(--primary)" }}>{stat.count}</span>
+                <span className={`badge ${CATEGORY_COLORS[stat.category] ?? "badge-gray"}`} style={{ fontSize: 12 }}>
+                  {stat.category}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search Input */}
       <div className="card" style={{ padding: "16px 20px" }}>
@@ -104,7 +138,6 @@ function SearchContent() {
             value={inputVal}
             onChange={(e) => handleInput(e.target.value)}
             style={{ padding: "0 16px", fontSize: 16, height: 48, width: "100%" }}
-            autoFocus
             autoComplete="off"
           />
           {loading && (
@@ -199,10 +232,10 @@ function SearchContent() {
   );
 }
 
-export function HomeClient() {
+export function HomeClient({ initialStats }: { initialStats?: { category: string; count: number }[] }) {
   return (
     <Suspense fallback={<div style={{ padding: 32, textAlign: "center" }}>Loading search…</div>}>
-      <SearchContent />
+      <SearchContent initialStats={initialStats} />
     </Suspense>
   );
 }

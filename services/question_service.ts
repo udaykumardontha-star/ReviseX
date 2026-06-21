@@ -263,6 +263,15 @@ export const questionService = {
     return ok({ items, total, page: 1, pageSize: 200 });
   },
 
+  async getCategoryStats(): Promise<Result<{ category: string; count: number }[]>> {
+    try {
+      const stats = await questionRepository.getCategoryStats();
+      return ok(stats);
+    } catch (e: any) {
+      return err("Failed to get stats", e, "DATABASE_ERROR");
+    }
+  },
+
   // ─── Flags ─────────────────────────────────────────────────────────────────
 
   /**

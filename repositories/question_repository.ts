@@ -668,6 +668,20 @@ export const questionRepository = {
     return result !== undefined;
   },
 
+  async getCategoryStats(): Promise<{ category: string; count: number }[]> {
+    const res = await rawSqlite.execute(`
+      SELECT category, COUNT(*) as count 
+      FROM questions 
+      WHERE is_deleted = 0 
+      GROUP BY category
+      ORDER BY count DESC
+    `);
+    return res.rows.map(r => ({
+      category: String(r[0]),
+      count: Number(r[1])
+    }));
+  },
+
   /**
    * Returns soft-deleted questions for the trash view.
    */

@@ -82,7 +82,7 @@ Output format:
       "category": "Predefined category name",
       "chapter": "Predefined chapter name from the mapping",
       "topic": "Highly specific dynamic micro-topic name",
-      "exam_name": "Extract the exam name and year if it appears anywhere near the question (e.g., 'SSC CGL 2023 Tier 1', 'RRB NTPC 2019', 'CDS 2021'). Look carefully at prefixes or suffixes like (SSC CHSL 2021). If not found, return null."
+"exam_name": "EXTREMELY IMPORTANT: You must meticulously scan the ENTIRE text (including headers, footers, prefixes, or suffixes) for ANY mention of an exam name or year. Look for patterns like 'SSC CGL 2023 Tier 1', 'RRB NTPC 2019', 'CDS 2021', '(SSC CHSL 2021)', 'CGL 22', 'MTS 2020', etc. If you find ANY hint of an exam, you MUST extract it. Do NOT leave this null unless you are 100% certain there is absolutely no exam reference."
     }
   ]
 }`;
