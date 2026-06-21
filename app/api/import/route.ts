@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
         textContent,
         fileName: body.fileName ?? "Pasted Text",
         sourceName: body.sourceName ?? "Manual Paste",
-        forcedCategory: body.forcedCategory,
-        forcedChapter: body.forcedChapter,
+        ...(body.forcedCategory && { forcedCategory: body.forcedCategory }),
+        ...(body.forcedChapter && { forcedChapter: body.forcedChapter }),
       });
 
       if (!result.success) {
@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
       mimeType,
       fileName: file.name,
       sourceName,
-      forcedCategory,
-      forcedChapter,
+      ...(forcedCategory && { forcedCategory }),
+      ...(forcedChapter && { forcedChapter }),
     });
 
     if (!result.success) {

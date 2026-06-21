@@ -33,7 +33,7 @@ import { geminiClient } from "@/lib/ai/gemini_client";
 import { pdfProcessor, detectFileType } from "@/lib/pdf/pdf_processor";
 import { validationService } from "@/services/validation_service";
 import { hashBuffer } from "@/lib/utils/hasher";
-import type { ImportJob } from "@/db/schema";
+import type { ImportJob, ValidCategory } from "@/db/schema";
 import type { ImportFileType } from "@/lib/pdf/pdf_processor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -490,7 +490,7 @@ async function stageQuestionsFromAiResponse(
     explanation: q.shortExplanation,
     difficulty: q.difficulty,
     topic: q.topic,
-    category: job.forcedCategory || q.category,
+    category: (job.forcedCategory || q.category) as ValidCategory,
     chapter: job.forcedChapter || q.chapter,
     examName: q.examName ?? null,
   }));

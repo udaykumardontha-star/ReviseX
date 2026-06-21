@@ -483,6 +483,78 @@ export function ImportPageClient() {
             </div>
           )}
 
+          {/* Overrides */}
+          <div style={{ display: "flex", gap: 16, marginTop: 16, marginBottom: 16 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
+                Force Subject / Category
+              </label>
+              <select
+                className="input"
+                value={forcedCategory}
+                onChange={(e) => { setForcedCategory(e.target.value); setForcedChapter("Auto-Detect"); }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", backgroundColor: "var(--surface)" }}
+              >
+                <option value="Auto-Detect">✨ Auto-Detect</option>
+                {VALID_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
+                Force Chapter / Section
+              </label>
+              <select
+                className="input"
+                value={forcedChapter}
+                onChange={(e) => setForcedChapter(e.target.value)}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", backgroundColor: "var(--surface)" }}
+                disabled={forcedCategory === "Auto-Detect"}
+              >
+                <option value="Auto-Detect">✨ Auto-Detect</option>
+                {forcedCategory !== "Auto-Detect" && VALID_CHAPTERS_BY_CATEGORY[forcedCategory as keyof typeof VALID_CHAPTERS_BY_CATEGORY]?.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Overrides */}
+          <div style={{ display: "flex", gap: 16, marginTop: 16, marginBottom: 16 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
+                Force Subject / Category
+              </label>
+              <select
+                className="input"
+                value={forcedCategory}
+                onChange={(e) => { setForcedCategory(e.target.value); setForcedChapter("Auto-Detect"); }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", backgroundColor: "var(--surface)" }}
+              >
+                <option value="Auto-Detect">✨ Auto-Detect</option>
+                {VALID_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
+                Force Chapter / Section
+              </label>
+              <select
+                className="input"
+                value={forcedChapter}
+                onChange={(e) => setForcedChapter(e.target.value)}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", backgroundColor: "var(--surface)" }}
+                disabled={forcedCategory === "Auto-Detect"}
+              >
+                <option value="Auto-Detect">✨ Auto-Detect</option>
+                {forcedCategory !== "Auto-Detect" && VALID_CHAPTERS_BY_CATEGORY[forcedCategory as keyof typeof VALID_CHAPTERS_BY_CATEGORY]?.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* Submit */}
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <button
