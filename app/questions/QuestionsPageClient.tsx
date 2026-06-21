@@ -222,7 +222,6 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
                         📌 {q.topicName}
                       </Link>
                     )}
-                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>👁 {q.timesViewed} views · 📖 {q.timesRevised} revisions</span>
                   </div>
                   {!isRevealed && (
                     <button className="btn btn-ghost btn-sm" onClick={() => reveal(q.id)}>Reveal Answer</button>

@@ -3,11 +3,11 @@ import { importService } from "@/services/import_service";
 
 export async function POST(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    const { id } = await params;
-    const jobId = parseInt(id, 10);
+    const { jobId: idParam } = await params;
+    const jobId = parseInt(idParam, 10);
     if (isNaN(jobId)) return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
 
     const pauseResult = await importService.pauseJob(jobId);

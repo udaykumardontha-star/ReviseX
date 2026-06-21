@@ -24,7 +24,7 @@ type Props = { slug: string; initialTopic: Topic | null; initialNote?: NoteData 
 
 export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
   const [topic] = useState<Topic | null>(initialTopic);
-  const [activeTab, setActiveTab] = useState<"note" | "questions" | "facts">("note");
+  const [activeTab, setActiveTab] = useState<"note" | "questions" | "facts">("facts");
   const [noteData, setNoteData] = useState<NoteData | null>(initialNote ?? null);
   const [noteLoading, setNoteLoading] = useState(!initialNote);
   const [noteError, setNoteError] = useState("");
