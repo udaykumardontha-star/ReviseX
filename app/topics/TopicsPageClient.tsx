@@ -9,7 +9,10 @@ type Topic = {
 };
 type ListData = { items: Topic[]; total: number; page: number; pageSize: number };
 
-const CATEGORIES = ["All", "Geography", "History", "Polity", "Economy", "Science", "Static G.K.", "Current Affairs", "Miscellaneous"];
+const SUBJECTS = ["All", "General Knowledge", "English"];
+const GK_CATEGORIES = ["All", "Geography", "History", "Polity", "Economy", "Science", "Static G.K.", "Current Affairs", "Miscellaneous"];
+const ENGLISH_CHAPTERS = ["All", "Spot the Error", "Sentence Improvement", "Narration", "Active passive", "Para jumble", "Fill in the blanks", "Cloze Test", "Comprehension", "One Word Substitution", "Idioms", "Synonyms", "Antonyms", "Spelling check", "Homonyms", "Miscellaneous"];
+
 const STATUSES = [
   { value: "", label: "All Status" },
   { value: "generated", label: "✅ Has Note" },
@@ -19,7 +22,7 @@ const STATUSES = [
 const CATEGORY_COLORS: Record<string, string> = {
   Geography: "badge-blue", History: "badge-amber", Polity: "badge-purple",
   Economy: "badge-green", Science: "badge-red", "Static G.K.": "badge-purple",
-  "Current Affairs": "badge-blue", Miscellaneous: "badge-gray",
+  "Current Affairs": "badge-blue", English: "badge-teal", Miscellaneous: "badge-gray",
 };
 
 type Props = { initialData?: ListData | null };
@@ -27,7 +30,8 @@ type Props = { initialData?: ListData | null };
 export function TopicsPageClient({ initialData }: Props) {
   const [data, setData] = useState<ListData | null>(initialData ?? null);
   const [loading, setLoading] = useState(!initialData);
-  const [category, setCategory] = useState("All");
+  const [subject, setSubject] = useState("All");
+  const [section, setSection] = useState("All");
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -40,14 +44,22 @@ export function TopicsPageClient({ initialData }: Props) {
       page: String(page),
       pageSize: String(pageSize),
     });
-    if (category !== "All") params.set("category", category);
+    
+    if (subject === "General Knowledge") {
+      params.set("subject", "GK");
+      if (section !== "All") params.set("category", section);
+    } else if (subject === "English") {
+      params.set("subject", "English");
+      if (section !== "All") params.set("chapter", section);
+    }
+
     if (status) params.set("status", status);
     if (q.trim()) params.set("q", q.trim());
 
     const r = await fetch(`/api/topics?${params.toString()}`);
     if (r.ok) setData(await r.json() as ListData);
     setLoading(false);
-  }, [category, status, q, page]);
+  }, [subject, section, status, q, page]);
 
   useEffect(() => {
     if (isInitialMount && initialData) {
@@ -70,38 +82,66 @@ export function TopicsPageClient({ initialData }: Props) {
 
       {/* Search + Filters */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div className="input-group" style={{ maxWidth: 400 }}>
-          <span className="input-icon">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-          </span>
-          <input
-            className="input"
-            placeholder="Search topics…"
-            value={q}
-            onChange={(e) => { setQ(e.target.value); setPage(1); }}
-          />
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="input-group" style={{ maxWidth: 300, flex: 1, minWidth: 200 }}>
+            <span className="input-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+            </span>
+            <input
+              className="input"
+              placeholder="Search topics…"
+              value={q}
+              onChange={(e) => { setQ(e.target.value); setPage(1); }}
+            />
+          </div>
+          <select
+            className="input select"
+            style={{ width: "auto", paddingTop: 7, paddingBottom: 7 }}
+            value={status}
+            onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+          >
+            {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {CATEGORIES.map((c) => (
-            <button
-              key={c}
-              className={`filter-chip ${category === c ? "active" : ""}`}
-              onClick={() => { setCategory(c); setPage(1); }}
-            >{c}</button>
-          ))}
-          <div style={{ marginLeft: 8 }}>
-            <select
-              className="input select"
-              style={{ width: "auto", paddingTop: 7, paddingBottom: 7 }}
-              value={status}
-              onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-            >
-              {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {SUBJECTS.map((s) => (
+              <button
+                key={s}
+                className={`filter-chip ${subject === s ? "active" : ""}`}
+                onClick={() => { setSubject(s); setSection("All"); setPage(1); }}
+              >{s === "General Knowledge" ? "🌍 GK" : s === "English" ? "📖 English" : "All Folders"}</button>
+            ))}
           </div>
+          
+          {subject === "General Knowledge" && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", paddingLeft: 12, borderLeft: "2px solid var(--border)", marginLeft: 4 }}>
+              {GK_CATEGORIES.map((c) => (
+                <button
+                  key={c}
+                  className={`filter-chip ${section === c ? "active" : ""}`}
+                  style={{ fontSize: 13, padding: "4px 10px" }}
+                  onClick={() => { setSection(c); setPage(1); }}
+                >{c}</button>
+              ))}
+            </div>
+          )}
+
+          {subject === "English" && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", paddingLeft: 12, borderLeft: "2px solid var(--border)", marginLeft: 4 }}>
+              {ENGLISH_CHAPTERS.map((c) => (
+                <button
+                  key={c}
+                  className={`filter-chip ${section === c ? "active" : ""}`}
+                  style={{ fontSize: 13, padding: "4px 10px" }}
+                  onClick={() => { setSection(c); setPage(1); }}
+                >{c}</button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

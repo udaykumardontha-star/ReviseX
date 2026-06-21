@@ -52,6 +52,8 @@ export type QuestionFilterOptions = {
   topicId?: number;
   sourceId?: number;
   category?: ValidCategory;
+  chapter?: string;
+  subject?: "GK" | "English";
   difficulty?: ValidDifficulty;
   isBookmarked?: boolean;
   limit?: number;
@@ -259,6 +261,8 @@ export const questionRepository = {
       topicId,
       sourceId,
       category,
+      chapter,
+      subject,
       difficulty,
       isBookmarked,
       limit = 20,
@@ -267,6 +271,12 @@ export const questionRepository = {
 
     const conditions: string[] = ["q.is_deleted = 0"];
     const params: (number | string)[] = [];
+
+    if (subject === "English") {
+      conditions.push("q.category = 'English'");
+    } else if (subject === "GK") {
+      conditions.push("q.category != 'English'");
+    }
 
     if (topicId !== undefined) {
       conditions.push("q.topic_id = ?");
@@ -279,6 +289,10 @@ export const questionRepository = {
     if (category !== undefined) {
       conditions.push("q.category = ?");
       params.push(category);
+    }
+    if (chapter !== undefined) {
+      conditions.push("t.chapter = ?");
+      params.push(chapter);
     }
     if (difficulty !== undefined) {
       conditions.push("q.difficulty = ?");

@@ -68,6 +68,7 @@ export type TopicListItem = Pick<
 export type TopicFilterOptions = {
   category?: ValidCategory;
   chapter?: string;
+  subject?: "GK" | "English";
   status?: TopicStatus;
   search?: string;
   limit?: number;
@@ -214,9 +215,15 @@ export const topicRepository = {
     items: TopicListItem[];
     total: number;
   }> {
-    const { category, chapter, status, search, limit = 50, offset = 0 } = options;
+    const { category, chapter, subject, status, search, limit = 50, offset = 0 } = options;
 
     const conditions = [eq(topics.isDeleted, false)];
+
+    if (subject === "English") {
+      conditions.push(eq(topics.category, "English"));
+    } else if (subject === "GK") {
+      conditions.push(sql`${topics.category} != 'English'`);
+    }
 
     if (category) {
       conditions.push(eq(topics.category, category));

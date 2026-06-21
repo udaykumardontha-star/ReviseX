@@ -259,6 +259,7 @@ code, pre, kbd { font-family: 'JetBrains Mono', monospace; }
 .badge-red { background: #ffe5e3; color: #c0180f; }
 .badge-gray { background: var(--surface-2); color: var(--text-muted); }
 .badge-purple { background: #eee5ff; color: #6030cc; }
+.badge-teal { background: #e0f2f1; color: #00796b; }
 
 /* ─── Inputs ─────────────────────────────────────────────────────────────── */
 .input {

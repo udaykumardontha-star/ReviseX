@@ -7,11 +7,15 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const pageSize = parseInt(searchParams.get("pageSize") ?? "24", 10);
   const category = searchParams.get("category") ?? undefined;
+  const chapter = searchParams.get("chapter") ?? undefined;
+  const subject = searchParams.get("subject") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
   const q = searchParams.get("q") ?? undefined;
 
   const filters: TopicFilterOptions = { limit: pageSize };
   if (category) filters.category = category as NonNullable<TopicFilterOptions["category"]>;
+  if (chapter) filters.chapter = chapter;
+  if (subject) filters.subject = subject as NonNullable<TopicFilterOptions["subject"]>;
   if (status) filters.status = status as NonNullable<TopicFilterOptions["status"]>;
   if (q) filters.search = q;
 

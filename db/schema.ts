@@ -30,6 +30,7 @@ export const VALID_CATEGORIES = [
   "Science",
   "Static G.K.",
   "Current Affairs",
+  "English",
   "Miscellaneous",
 ] as const;
 
@@ -91,6 +92,11 @@ export const VALID_CHAPTERS_BY_CATEGORY: Record<ValidCategory, readonly string[]
     "Schemes", "Sports", "Appointments", "Awards", "Agreements and Mou", "Defence", 
     "National Affairs", "International Affairs", "Science and Technology", "Books and Authors", 
     "Portals and Apps", "Obituary", "Ranking and Index", "Important Days and Themes", "Miscellaneous"
+  ],
+  "English": [
+    "Spot the Error", "Sentence Improvement", "Narration", "Active passive", "Para jumble", 
+    "Fill in the blanks", "Cloze Test", "Comprehension", "One Word Substitution", "Idioms", 
+    "Synonyms", "Antonyms", "Spelling check", "Homonyms", "Miscellaneous"
   ],
   "Miscellaneous": [
     "Miscellaneous"

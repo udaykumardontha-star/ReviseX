@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const pageSize = parseInt(searchParams.get("pageSize") ?? "20", 10);
   const category = searchParams.get("category") ?? undefined;
+  const chapter = searchParams.get("chapter") ?? undefined;
+  const subject = searchParams.get("subject") ?? undefined;
   const difficulty = searchParams.get("difficulty") ?? undefined;
   const topicId = searchParams.get("topicId") ? parseInt(searchParams.get("topicId")!, 10) : undefined;
   const isBookmarked = searchParams.get("bookmarked") === "true" ? true : undefined;
@@ -27,6 +29,8 @@ export async function GET(req: NextRequest) {
     offset: (page - 1) * pageSize,
   };
   if (category) filters.category = category as NonNullable<QuestionFilterOptions["category"]>;
+  if (chapter) filters.chapter = chapter;
+  if (subject) filters.subject = subject as NonNullable<QuestionFilterOptions["subject"]>;
   if (difficulty) filters.difficulty = difficulty as NonNullable<QuestionFilterOptions["difficulty"]>;
   if (topicId) filters.topicId = topicId;
   if (isBookmarked !== undefined) filters.isBookmarked = isBookmarked;

@@ -12,12 +12,15 @@ type Question = {
 };
 type ListData = { items: Question[]; total: number; page: number; pageSize: number };
 
-const CATEGORIES = ["All", "Geography", "History", "Polity", "Economy", "Science", "Static G.K.", "Current Affairs", "Miscellaneous"];
+const SUBJECTS = ["All", "General Knowledge", "English"];
+const GK_CATEGORIES = ["All", "Geography", "History", "Polity", "Economy", "Science", "Static G.K.", "Current Affairs", "Miscellaneous"];
+const ENGLISH_CHAPTERS = ["All", "Spot the Error", "Sentence Improvement", "Narration", "Active passive", "Para jumble", "Fill in the blanks", "Cloze Test", "Comprehension", "One Word Substitution", "Idioms", "Synonyms", "Antonyms", "Spelling check", "Homonyms", "Miscellaneous"];
+
 const DIFFICULTIES = ["All", "easy", "medium", "hard"];
 const CATEGORY_COLORS: Record<string, string> = {
   Geography: "badge-blue", History: "badge-amber", Polity: "badge-purple",
   Economy: "badge-green", Science: "badge-red", "Static G.K.": "badge-purple",
-  "Current Affairs": "badge-blue", Miscellaneous: "badge-gray",
+  "Current Affairs": "badge-blue", English: "badge-teal", Miscellaneous: "badge-gray",
 };
 const DIFF_COLOR: Record<string, string> = { easy: "badge-green", medium: "badge-amber", hard: "badge-red" };
 
@@ -26,7 +29,8 @@ const listCache = new Map<string, ListData>();
 export function QuestionsPageClient() {
   const [data, setData] = useState<ListData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [category, setCategory] = useState("All");
+  const [subject, setSubject] = useState("All");
+  const [section, setSection] = useState("All");
   const [difficulty, setDifficulty] = useState("All");
   const [bookmarkedOnly, setBookmarkedOnly] = useState(false);
   const [q, setQ] = useState("");
@@ -38,7 +42,15 @@ export function QuestionsPageClient() {
   const fetchQuestions = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (q.trim().length >= 2) params.set("q", q.trim());
-    if (category !== "All") params.set("category", category);
+    
+    if (subject === "General Knowledge") {
+      params.set("subject", "GK");
+      if (section !== "All") params.set("category", section);
+    } else if (subject === "English") {
+      params.set("subject", "English");
+      if (section !== "All") params.set("chapter", section);
+    }
+
     if (difficulty !== "All") params.set("difficulty", difficulty);
     if (bookmarkedOnly) params.set("bookmarked", "true");
 
@@ -63,7 +75,7 @@ export function QuestionsPageClient() {
       setBookmarks((prev) => ({ ...prev, ...bm }));
     }
     setLoading(false);
-  }, [q, category, difficulty, bookmarkedOnly, page]);
+  }, [q, subject, section, difficulty, bookmarkedOnly, page]);
 
   useEffect(() => { void fetchQuestions(); }, [fetchQuestions]);
 
@@ -99,25 +111,50 @@ export function QuestionsPageClient() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {CATEGORIES.map((c) => (
-            <button key={c} className={`filter-chip ${category === c ? "active" : ""}`}
-              onClick={() => { setCategory(c); setPage(1); }}>{c}</button>
-          ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {SUBJECTS.map((s) => (
+              <button key={s} className={`filter-chip ${subject === s ? "active" : ""}`}
+                onClick={() => { setSubject(s); setSection("All"); setPage(1); }}>
+                {s === "General Knowledge" ? "🌍 GK" : s === "English" ? "📖 English" : "All Folders"}
+              </button>
+            ))}
+          </div>
+          
+          <div style={{ width: 1, height: 24, background: "var(--border)", margin: "0 4px" }} />
+
+          <div style={{ display: "flex", gap: 6 }}>
+            {DIFFICULTIES.map((d) => (
+              <button key={d} className={`filter-chip ${difficulty === d ? "active" : ""}`}
+                onClick={() => { setDifficulty(d); setPage(1); }}
+                style={{ textTransform: "capitalize" }}>{d}</button>
+            ))}
+          </div>
+          <button
+            className={`filter-chip ${bookmarkedOnly ? "active" : ""}`}
+            onClick={() => { setBookmarkedOnly((b) => !b); setPage(1); }}>
+            🔖 Bookmarks only
+          </button>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {DIFFICULTIES.map((d) => (
-            <button key={d} className={`filter-chip ${difficulty === d ? "active" : ""}`}
-              onClick={() => { setDifficulty(d); setPage(1); }}
-              style={{ textTransform: "capitalize" }}>{d}</button>
-          ))}
-        </div>
-        <button
-          className={`filter-chip ${bookmarkedOnly ? "active" : ""}`}
-          onClick={() => { setBookmarkedOnly((b) => !b); setPage(1); }}>
-          🔖 Bookmarks only
-        </button>
+
+        {subject === "General Knowledge" && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", paddingLeft: 12, borderLeft: "2px solid var(--border)", marginLeft: 4 }}>
+            {GK_CATEGORIES.map((c) => (
+              <button key={c} className={`filter-chip filter-chip-sm ${section === c ? "active" : ""}`}
+                onClick={() => { setSection(c); setPage(1); }}>{c}</button>
+            ))}
+          </div>
+        )}
+
+        {subject === "English" && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", paddingLeft: 12, borderLeft: "2px solid var(--border)", marginLeft: 4 }}>
+            {ENGLISH_CHAPTERS.map((c) => (
+              <button key={c} className={`filter-chip filter-chip-sm ${section === c ? "active" : ""}`}
+                onClick={() => { setSection(c); setPage(1); }}>{c}</button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Questions */}

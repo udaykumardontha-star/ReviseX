@@ -96,8 +96,8 @@ const TOPIC_GENERATOR_SYSTEM_PROMPT = `You are an SSC Exam Tutor. Generate a com
 ${JSON.stringify(VALID_CHAPTERS_BY_CATEGORY, null, 2)}
 CRITICAL: The 'chapter' string MUST be an EXACT copy-paste from the array for your chosen category. DO NOT invent or rephrase chapters.
 3. keywords: 4–6 highly searchable lowercase keywords.
-4. key_facts: 10–20 atomic facts, each as "Fact → Detail".
-5. full_revision_note: A detailed, well-structured Markdown document (use ## headings, bullet points, tables where helpful). Minimum 500 words.
+4. key_facts: 10–20 atomic facts, each as "Fact → Detail". For English Grammar, focus on rules, exceptions, and 'Incorrect vs Correct' examples. For English Vocabulary, focus on meanings, synonyms, antonyms, and usage.
+5. full_revision_note: A detailed, well-structured Markdown document (use ## headings, bullet points, tables where helpful). Minimum 500 words. For English Practice topics (like Para Jumbles), focus on solving strategies.
 6. quick_revision_card: 10–20 atomic bullet points for last-minute revision.
 7. ssc_traps: Common trick variations and examiner traps for this topic.
 8. Return ONLY valid JSON. No markdown code fences, no explanation outside JSON.
