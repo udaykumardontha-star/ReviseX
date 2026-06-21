@@ -5,7 +5,7 @@
   "description": "NeomX — Premium SSC Exam Revision PWA",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "npm run db:migrate && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
