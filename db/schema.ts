@@ -1,7 +1,7 @@
 /**
  * db/schema.ts
  *
- * Complete Drizzle ORM schema for ReviseX.
+ * Complete Drizzle ORM schema for NeomX.
  * Uses drizzle-orm 0.36.x object-style extraConfig syntax.
  *
  * FTS5 virtual tables are NOT modeled here — they live in:
@@ -640,3 +640,4 @@ export type TopicWithNoteStatus = Topic & {
   hasNote: boolean;
   noteId: number | null;
 };
+

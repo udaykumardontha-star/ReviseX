@@ -2,7 +2,7 @@
  * lib/ai/gemini_client.ts
  *
  * Thin wrapper around @google/generative-ai.
- * All Gemini API calls in ReviseX go through this file.
+ * All Gemini API calls in NeomX go through this file.
  *
  * Responsibilities:
  *   - Initialise the SDK with the API key from env
@@ -288,3 +288,4 @@ export const geminiClient = {
     return modelId;
   },
 } as const;
+

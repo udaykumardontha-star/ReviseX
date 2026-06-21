@@ -1,7 +1,7 @@
 /**
  * lib/pdf/pdf_processor.ts
  *
- * Unified file processing utility for ReviseX import pipeline.
+ * Unified file processing utility for NeomX import pipeline.
  * Handles three input types: PDF, Image (PNG/JPG/JPEG/WEBP), and raw Text.
  *
  * All three types produce chunks that flow into the same import pipeline.
@@ -270,3 +270,4 @@ export const pdfProcessor = {
     return ok(true);
   },
 } as const;
+

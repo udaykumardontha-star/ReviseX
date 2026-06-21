@@ -13,7 +13,7 @@ export default function OfflinePage() {
         You&apos;re Offline
       </h1>
       <p style={{ fontSize: 16, color: "#555", maxWidth: 360, margin: 0, lineHeight: 1.6 }}>
-        ReviseX needs an internet connection to load new content.
+        NeomX needs an internet connection to load new content.
         Check your connection and try again.
       </p>
       <button
@@ -31,3 +31,4 @@ export default function OfflinePage() {
     </div>
   );
 }
+

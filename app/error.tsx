@@ -10,7 +10,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[ReviseX Error]", error);
+    console.error("[NeomX Error]", error);
   }, [error]);
 
   return (
@@ -36,3 +36,4 @@ export default function GlobalError({
     </div>
   );
 }
+

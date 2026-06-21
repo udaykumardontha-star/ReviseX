@@ -16,7 +16,7 @@ export function Sidebar() {
   return (
     <aside className="app-sidebar">
       <div className="sidebar-logo">
-        <img src="/logo-horizontal.png" alt="ReviseX" style={{ height: 32, objectFit: "contain", maxWidth: "100%" }} />
+        <img src="/logo-horizontal.png" alt="NeomX" style={{ height: 32, objectFit: "contain", maxWidth: "100%" }} />
       </div>
 
       <nav className="sidebar-nav">
@@ -42,3 +42,4 @@ export function Sidebar() {
     </aside>
   );
 }
+
