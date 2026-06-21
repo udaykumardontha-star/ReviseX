@@ -125,8 +125,11 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
     void fetchQueue();
   };
 
+  const [justPromoted, setJustPromoted] = useState(false);
+
   const promote = async () => {
     setPromoting(true);
+    setJustPromoted(false);
     try {
       const r = await fetch(`/api/staging/${jobId}/promote`, { method: "POST" });
       if (!r.ok) {
@@ -144,6 +147,7 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
       
       const d = await r.json() as { promoted?: number; skipped?: number; topicsCreated?: number };
       showToast(`✅ Promoted ${d.promoted ?? 0} questions! ${d.topicsCreated ?? 0} new topics.`);
+      setJustPromoted(true);
       void fetchQueue();
     } catch (e) {
       showToast(`❌ Network error or server crash`, "error");
@@ -181,7 +185,7 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
             ❌ Reject All
           </button>
           <button className="btn btn-primary" onClick={promote} disabled={!stats?.approved || promoting}>
-            {promoting ? <><div className="spinner" />Promoting…</> : `🚀 Promote ${stats?.approved ?? 0} to Bank`}
+            {promoting ? <><div className="spinner" />Promoting…</> : justPromoted && !stats?.approved ? '✅ Promoted!' : `🚀 Promote ${stats?.approved ?? 0} to Bank`}
           </button>
         </div>
       </div>
@@ -224,21 +228,28 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
         </div>
       ) : items.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">{statusFilter === "pending" ? "🎉" : "📭"}</div>
+          <div className="empty-icon">{justPromoted ? "✅" : statusFilter === "pending" ? "🎉" : "📭"}</div>
           <div className="empty-title">
-            {statusFilter === "pending" ? "All questions reviewed!" : `No ${statusFilter} questions`}
+            {justPromoted ? "Successfully Promoted!" : statusFilter === "pending" ? "All questions reviewed!" : `No ${statusFilter} questions`}
           </div>
           <div className="empty-desc">
-            {statusFilter === "pending"
-              ? stats?.approved
-                ? `${stats.approved} approved — click "Promote to Bank" to add them to your question bank.`
-                : "Switch to All tab to see all questions."
-              : "Nothing here yet."}
+            {justPromoted
+              ? "The approved questions have been successfully moved to your Question Bank."
+              : statusFilter === "pending"
+                ? stats?.approved
+                  ? `${stats.approved} approved — click "Promote to Bank" to add them to your question bank.`
+                  : "Switch to All tab to see all questions."
+                : "Nothing here yet."}
           </div>
-          {statusFilter === "pending" && !!stats?.approved && (
+          {statusFilter === "pending" && !!stats?.approved && !justPromoted && (
             <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={promote} disabled={promoting}>
               {promoting ? "Promoting…" : `🚀 Promote ${stats.approved} to Bank`}
             </button>
+          )}
+          {justPromoted && (
+            <Link href="/" className="btn btn-secondary" style={{ marginTop: 12 }}>
+              Go to Dashboard
+            </Link>
           )}
         </div>
       ) : (
