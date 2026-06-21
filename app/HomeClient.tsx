@@ -35,7 +35,12 @@ const TYPE_LABELS: Record<string, string> = {
 const CATEGORY_COLORS: Record<string, string> = {
   Geography: "badge-blue", History: "badge-amber", Polity: "badge-purple",
   Economy: "badge-green", Science: "badge-red", "Static G.K.": "badge-purple",
-  "Current Affairs": "badge-blue", English: "badge-teal", Miscellaneous: "badge-gray",
+  "Current Affairs": "badge-blue", Miscellaneous: "badge-gray",
+  "Spot the Error": "badge-teal", "Sentence Improvement": "badge-blue", "Narration": "badge-amber", 
+  "Active passive": "badge-green", "Para jumble": "badge-purple", "Fill in the blanks": "badge-red", 
+  "Cloze Test": "badge-teal", "Comprehension": "badge-blue", "One Word Substitution": "badge-amber", 
+  "Idioms": "badge-green", "Synonyms": "badge-purple", "Antonyms": "badge-red", 
+  "Spelling check": "badge-teal", "Homonyms": "badge-blue"
 };
 
 export function SearchContent({ initialStats }: { initialStats?: { category: string; count: number }[] }) {

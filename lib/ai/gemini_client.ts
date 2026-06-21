@@ -39,7 +39,7 @@ const JSON_GENERATION_CONFIG = {
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
 
-import { VALID_CATEGORIES, VALID_CHAPTERS_BY_CATEGORY } from "@/db/schema";
+import { VALID_CATEGORIES } from "@/db/schema";
 
 /**
  * Prompt 1 — Question Extractor
@@ -55,10 +55,7 @@ import { VALID_CATEGORIES, VALID_CHAPTERS_BY_CATEGORY } from "@/db/schema";
 const QUESTION_EXTRACTOR_SYSTEM_PROMPT = `You are an SSC Exam Data Processor. Extract multiple-choice questions from the input into a valid JSON object. Follow these rules strictly:
 
 1. Categories MUST be exactly one of: ${VALID_CATEGORIES.join(", ")}.
-2. You MUST assign a predefined 'chapter' for the selected category based on this strict mapping:
-${JSON.stringify(VALID_CHAPTERS_BY_CATEGORY, null, 2)}
-CRITICAL: The 'chapter' string MUST be an EXACT copy-paste from the array for your chosen category. DO NOT invent or rephrase chapters.
-3. 'topic' must be highly specific and dynamically generated (e.g., "Mughal Architecture", "Cricket Terminology"). DO NOT just copy the chapter name.
+2. 'topic' must be highly specific and dynamically generated (e.g., "Mughal Architecture", "Cricket Terminology"). DO NOT just copy the category name.
 4. correct_option must be exactly "A", "B", "C", or "D".
 5. difficulty must be exactly "easy", "medium", or "hard".
 6. short_explanation is MANDATORY for every question. Rules:
@@ -80,7 +77,6 @@ Output format:
       "short_explanation": "Concise SSC-style explanation of why this answer is correct. One or two sentences max.",
       "difficulty": "medium",
       "category": "Predefined category name",
-      "chapter": "Predefined chapter name from the mapping",
       "topic": "Highly specific dynamic micro-topic name",
 "exam_name": "EXTREMELY IMPORTANT: You must meticulously scan the ENTIRE text (including headers, footers, prefixes, or suffixes) for ANY mention of an exam name or year. Look for patterns like 'SSC CGL 2023 Tier 1', 'RRB NTPC 2019', 'CDS 2021', '(SSC CHSL 2021)', 'CGL 22', 'MTS 2020', etc. If you find ANY hint of an exam, you MUST extract it. Do NOT leave this null unless you are 100% certain there is absolutely no exam reference."
     }
@@ -92,10 +88,7 @@ Output format:
  */
 const TOPIC_GENERATOR_SYSTEM_PROMPT = `You are an SSC Exam Tutor. Generate a comprehensive revision knowledge base for the given topic. Follow these rules strictly:
 1. category MUST be exactly one of: ${VALID_CATEGORIES.join(", ")}.
-2. chapter MUST be exactly chosen from the following mapping for the selected category:
-${JSON.stringify(VALID_CHAPTERS_BY_CATEGORY, null, 2)}
-CRITICAL: The 'chapter' string MUST be an EXACT copy-paste from the array for your chosen category. DO NOT invent or rephrase chapters.
-3. keywords: 4–6 highly searchable lowercase keywords.
+2. keywords: 4–6 highly searchable lowercase keywords.
 4. key_facts: 10–20 atomic facts, each as "Fact → Detail". For English Grammar, focus on rules, exceptions, and 'Incorrect vs Correct' examples. For English Vocabulary, focus on meanings, synonyms, antonyms, and usage.
 5. full_revision_note: A detailed, well-structured Markdown document (use ## headings, bullet points, tables where helpful). Minimum 500 words. For English Practice topics (like Para Jumbles), focus on solving strategies.
 6. quick_revision_card: 10–20 atomic bullet points for last-minute revision.
@@ -106,7 +99,6 @@ Output format:
 {
   "topic": "Standardized topic title",
   "category": "Predefined category name",
-  "chapter": "Predefined chapter name",
   "keywords": ["keyword1", "keyword2"],
   "key_facts": ["Fact 1 → Detail", "Fact 2 → Detail"],
   "ssc_traps": "Common traps description.",

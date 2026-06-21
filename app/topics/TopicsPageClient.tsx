@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
 type Topic = {
-  id: number; slug: string; name: string; category: string; chapter: string;
+  id: number; slug: string; name: string; category: string;
   totalQuestions: number; topicStatus: string;
   totalNotes: number;
 };
@@ -50,7 +50,7 @@ export function TopicsPageClient({ initialData }: Props) {
       if (section !== "All") params.set("category", section);
     } else if (subject === "English") {
       params.set("subject", "English");
-      if (section !== "All") params.set("chapter", section);
+      if (section !== "All") params.set("category", section);
     }
 
     if (status) params.set("status", status);
@@ -168,7 +168,6 @@ export function TopicsPageClient({ initialData }: Props) {
               </div>
               <div className="topic-meta">
                 <span className={`badge ${CATEGORY_COLORS[topic.category] ?? "badge-gray"}`}>{topic.category}</span>
-                <span className="topic-stat" style={{ color: "var(--text-muted)", marginLeft: -4 }}>&bull; {topic.chapter}</span>
                 <span className="topic-stat" style={{ marginLeft: "auto" }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z" /></svg>
                   {topic.totalQuestions} Qs

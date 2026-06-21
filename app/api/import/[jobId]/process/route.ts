@@ -34,6 +34,18 @@ export async function POST(
         const statusCode = result.code === "AI_RATE_LIMIT" ? 429 : 500;
         return NextResponse.json({ error: result.error, code: result.code }, { status: statusCode });
       }
+
+      // If QStash is enabled and not completed, hand off the rest of the chunks to the background queue
+      if (!result.data.isCompleted && process.env.QSTASH_TOKEN) {
+        const { qstashClient } = await import("@/lib/qstash");
+        if (qstashClient) {
+          const url = new URL("/api/qstash/process-chunk", req.url).toString();
+          await qstashClient.publishJSON({ url, body: { jobId } });
+          console.log(`[QStash] Handoff successful for job ${jobId}. Returning to client.`);
+          return NextResponse.json({ ...result.data, isCompleted: true, background: true });
+        }
+      }
+
       return NextResponse.json(result.data);
     }
 

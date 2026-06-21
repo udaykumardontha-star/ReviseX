@@ -35,13 +35,11 @@ export type CreateTopicInput = {
   slug: string;
   name: string;
   category: ValidCategory;
-  chapter: string;
 };
 
 export type TopicUpdate = Partial<{
   name: string;
   category: ValidCategory;
-  chapter: string;
   topicStatus: TopicStatus;
   lastGeneratedAt: string;
   totalNotes: number;
@@ -55,7 +53,6 @@ export type TopicListItem = Pick<
   | "slug"
   | "name"
   | "category"
-  | "chapter"
   | "topicStatus"
   | "totalQuestions"
   | "totalNotes"
@@ -67,7 +64,6 @@ export type TopicListItem = Pick<
 
 export type TopicFilterOptions = {
   category?: ValidCategory;
-  chapter?: string;
   subject?: "GK" | "English";
   status?: TopicStatus;
   search?: string;
@@ -97,7 +93,6 @@ export const topicRepository = {
         slug: input.slug,
         name: input.name,
         category: input.category,
-        chapter: input.chapter,
         topicStatus: "not_generated",
         totalQuestions: 0,
         totalNotes: 0,
@@ -215,7 +210,7 @@ export const topicRepository = {
     items: TopicListItem[];
     total: number;
   }> {
-    const { category, chapter, subject, status, search, limit = 50, offset = 0 } = options;
+    const { category, subject, status, search, limit = 50, offset = 0 } = options;
 
     const conditions = [eq(topics.isDeleted, false)];
 
@@ -227,9 +222,6 @@ export const topicRepository = {
 
     if (category) {
       conditions.push(eq(topics.category, category));
-    }
-    if (chapter) {
-      conditions.push(eq(topics.chapter, chapter));
     }
     if (status) {
       conditions.push(eq(topics.topicStatus, status));
@@ -247,7 +239,6 @@ export const topicRepository = {
           slug: topics.slug,
           name: topics.name,
           category: topics.category,
-          chapter: topics.chapter,
           topicStatus: topics.topicStatus,
           totalQuestions: topics.totalQuestions,
           totalNotes: topics.totalNotes,

@@ -119,6 +119,7 @@ export const importService = {
         if (!extractResult.success) return extractResult;
         fileHash = extractResult.data.fileHash;
         pageCount = extractResult.data.pageCount;
+        input.textContent = extractResult.data.text; // Store text for background processing
         if (pageCount === 0) {
           return err("PDF has 0 pages or contains no extractable text.", null, "UNSUPPORTED_FORMAT");
         }
@@ -345,18 +346,22 @@ export const importService = {
     }
 
     // ── PDF import ────────────────────────────────────────────────────────
-    if (!fileBuffer) {
-      await importJobRepository.markFailed(jobId);
-      return err("PDF buffer is required for PDF import", null, "UNSUPPORTED_FORMAT");
-    }
+    let fullText = job.textContent;
+    let pageCount = job.totalPages;
 
-    const extractResult = await pdfProcessor.extractText(fileBuffer);
-    if (!extractResult.success) {
-      await importJobRepository.markFailed(jobId);
-      return extractResult;
+    if (!fullText) {
+      if (!fileBuffer) {
+        await importJobRepository.markFailed(jobId);
+        return err("PDF buffer is required for PDF import when text is not cached", null, "UNSUPPORTED_FORMAT");
+      }
+      const extractResult = await pdfProcessor.extractText(fileBuffer);
+      if (!extractResult.success) {
+        await importJobRepository.markFailed(jobId);
+        return extractResult;
+      }
+      fullText = extractResult.data.text;
+      pageCount = extractResult.data.pageCount;
     }
-
-    const { text: fullText, pageCount } = extractResult.data;
     const pagesPerChunk = settings.pdfChunkSize;
     const chunks = pdfProcessor.chunkByPages(fullText, pageCount, pagesPerChunk);
 
@@ -508,7 +513,6 @@ async function stageQuestionsFromAiResponse(
     difficulty: q.difficulty,
     topic: q.topic,
     category: (job.forcedCategory || q.category) as ValidCategory,
-    chapter: job.forcedChapter || q.chapter,
     examName: q.examName ?? null,
   }));
 

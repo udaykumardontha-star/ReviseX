@@ -97,7 +97,6 @@ export const questionService = {
       const normalizedName = normalizeTopic(rawTopicName);
       const slug = toSlug(normalizedName);
       const category = staged.category as ValidCategory;
-      const chapter = staged.chapter;
 
       let topic = await topicRepository.resolveByNameOrAlias(normalizedName);
 
@@ -107,7 +106,6 @@ export const questionService = {
           slug,
           name: normalizedName,
           category,
-          chapter,
         });
         topic = created;
         topicsCreated++;

@@ -48,7 +48,7 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
       if (section !== "All") params.set("category", section);
     } else if (subject === "English") {
       params.set("subject", "English");
-      if (section !== "All") params.set("chapter", section);
+      if (section !== "All") params.set("category", section);
     }
 
     if (difficulty !== "All") params.set("difficulty", difficulty);

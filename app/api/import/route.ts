@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     // ── TEXT import (JSON body with textContent field) ──────────────────
     if (contentType.includes("application/json")) {
-      const body = await req.json() as { textContent?: string; sourceName?: string; fileName?: string; forcedCategory?: string; forcedChapter?: string };
+      const body = await req.json() as { textContent?: string; sourceName?: string; fileName?: string; forcedCategory?: string };
       const textContent = body.textContent?.trim();
 
       if (!textContent) {
@@ -25,7 +25,6 @@ export async function POST(req: NextRequest) {
         fileName: body.fileName ?? "Pasted Text",
         sourceName: body.sourceName ?? "Manual Paste",
         ...(body.forcedCategory && { forcedCategory: body.forcedCategory }),
-        ...(body.forcedChapter && { forcedChapter: body.forcedChapter }),
       });
 
       if (!result.success) {
@@ -41,7 +40,6 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file") as File | null;
     const sourceName = (formData.get("source") as string) || "Unknown Source";
     const forcedCategory = (formData.get("forcedCategory") as string) || undefined;
-    const forcedChapter = (formData.get("forcedChapter") as string) || undefined;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -64,7 +62,6 @@ export async function POST(req: NextRequest) {
       fileName: file.name,
       sourceName,
       ...(forcedCategory && { forcedCategory }),
-      ...(forcedChapter && { forcedChapter }),
     });
 
     if (!result.success) {

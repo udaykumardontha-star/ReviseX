@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { VALID_CATEGORIES, VALID_CHAPTERS_BY_CATEGORY } from "@/db/schema";
+import { VALID_CATEGORIES } from "@/db/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,7 +114,6 @@ export function ImportPageClient() {
   const [success, setSuccess] = useState("");
 
   const [forcedCategory, setForcedCategory] = useState("Auto-Detect");
-  const [forcedChapter, setForcedChapter] = useState("Auto-Detect");
 
   // ── Jobs list ─────────────────────────────────────────────────────────
   const [jobsData, setJobsData] = useState<JobsData | null>(null);
@@ -253,7 +252,6 @@ export function ImportPageClient() {
               sourceName: currentFile ? currentFile.name : "Manual Paste",
               fileName: currentFile ? currentFile.name : `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
               ...(forcedCategory !== "Auto-Detect" && { forcedCategory }),
-              ...(forcedChapter !== "Auto-Detect" && { forcedChapter }),
             }),
           });
         } else {
@@ -261,7 +259,6 @@ export function ImportPageClient() {
           formData.append("file", finalFile!);
           formData.append("source", finalFile!.name);
           if (forcedCategory !== "Auto-Detect") formData.append("forcedCategory", forcedCategory);
-          if (forcedChapter !== "Auto-Detect") formData.append("forcedChapter", forcedChapter);
           
           startRes = await fetch("/api/import", { method: "POST", body: formData });
         }
@@ -281,7 +278,7 @@ export function ImportPageClient() {
         setProcessing(true);
 
         // ── STAGE 2: Process (AI extraction) in chunks ────────────────────────────
-        let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean } = {
+        let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean; background?: boolean } = {
           totalExtracted: 0,
           totalSkipped: 0,
           isCompleted: false,
@@ -304,7 +301,7 @@ export function ImportPageClient() {
             });
           }
 
-          pd = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean };
+          pd = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean; background?: boolean };
 
           if (!processRes.ok) {
             if (pd.code === "AI_RATE_LIMIT") {
@@ -316,6 +313,17 @@ export function ImportPageClient() {
               setError(prev => prev ? `${prev}\n${pd.error}` : (pd.error ?? "Extraction failed."));
             }
             break; // Stop processing this file, move to next
+          }
+
+          if (pd.background) {
+            setSuccess(`⚡ Your file has been queued for background processing! You can close this tab safely. The extraction will continue in the cloud.`);
+            setFiles([]);
+            setImagePreview(null);
+            setTextContent("");
+            setUploading(false);
+            setProcessing(false);
+            void fetchJobs();
+            return;
           }
 
           // Refresh UI after each chunk
@@ -344,7 +352,7 @@ export function ImportPageClient() {
 
   const handleResume = async (jobId: number) => {
     setProcessing(true);
-    let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean } = { isCompleted: false, totalExtracted: 0, totalSkipped: 0 };
+    let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean; background?: boolean } = { isCompleted: false, totalExtracted: 0, totalSkipped: 0 };
     setError("");
     setSuccess("");
     
@@ -356,7 +364,7 @@ export function ImportPageClient() {
           body: JSON.stringify({}),
         });
         
-        const processJson = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean };
+        const processJson = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean; background?: boolean };
         if (!processRes.ok) {
           if (processJson.code === "AI_RATE_LIMIT") {
             setError(`⚠️ AI rate limit reached. Job paused.`);
@@ -365,6 +373,14 @@ export function ImportPageClient() {
           }
           break;
         }
+
+        if (processJson.background) {
+          setSuccess(`⚡ Your job has been queued for background processing! You can close this tab safely.`);
+          setProcessing(false);
+          await fetchJobs();
+          return;
+        }
+
         pd = processJson;
         await fetchJobs();
       }
@@ -545,29 +561,11 @@ export function ImportPageClient() {
               <select
                 className="input"
                 value={forcedCategory}
-                onChange={(e) => { setForcedCategory(e.target.value); setForcedChapter("Auto-Detect"); }}
+                onChange={(e) => { setForcedCategory(e.target.value); }}
                 style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", backgroundColor: "var(--surface)" }}
               >
                 <option value="Auto-Detect">✨ Auto-Detect</option>
                 {VALID_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-
-            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
-                Force Chapter / Section
-              </label>
-              <select
-                className="input"
-                value={forcedChapter}
-                onChange={(e) => setForcedChapter(e.target.value)}
-                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", backgroundColor: "var(--surface)" }}
-                disabled={forcedCategory === "Auto-Detect"}
-              >
-                <option value="Auto-Detect">✨ Auto-Detect</option>
-                {forcedCategory !== "Auto-Detect" && VALID_CHAPTERS_BY_CATEGORY[forcedCategory as keyof typeof VALID_CHAPTERS_BY_CATEGORY]?.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
               </select>
             </div>
           </div>

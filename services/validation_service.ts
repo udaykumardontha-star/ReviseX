@@ -16,7 +16,7 @@
  */
 
 import { z } from "zod";
-import { VALID_CATEGORIES, VALID_DIFFICULTIES, VALID_CHAPTERS_BY_CATEGORY } from "@/db/schema";
+import { VALID_CATEGORIES, VALID_DIFFICULTIES } from "@/db/schema";
 import type { ValidCategory, ValidDifficulty } from "@/db/schema";
 import { ok, err } from "@/types/result";
 import type { Result } from "@/types/result";
@@ -40,7 +40,6 @@ const ExtractedQuestionSchema = z.object({
   difficulty: z.string().optional().default("medium"),
   topic: z.string().min(2, "topic too short (min 2 chars)"),
   category: z.string().min(2, "category too short"),
-  chapter: z.string().min(2, "chapter too short"),
   exam_name: z.string().nullable().optional(),
 });
 
@@ -59,7 +58,6 @@ const QuestionExtractorResponseSchema = z.object({
 const TopicGeneratorResponseSchema = z.object({
   topic: z.string().min(2, "topic name too short"),
   category: z.string().min(2, "category too short"),
-  chapter: z.string().min(2, "chapter too short").optional().default("Miscellaneous"),
   keywords: z
     .array(z.string())
     .min(1, "keywords array is empty")
@@ -94,14 +92,12 @@ export type ValidatedExtractedQuestion = {
   difficulty: ValidDifficulty;
   topic: string;           // normalized display name
   category: ValidCategory; // enforced from VALID_CATEGORIES
-  chapter: string;         // enforced from VALID_CHAPTERS_BY_CATEGORY
   examName?: string | null;
 };
 
 export type ValidatedTopicGeneratorResponse = {
   topic: string;
   category: ValidCategory;
-  chapter: string;
   keywords: string[];
   keyFacts: string[];
   sscTraps: string;
@@ -201,37 +197,6 @@ export const validationService = {
       const category: ValidCategory =
         normalizeCategory(raw.category) ?? "Miscellaneous";
 
-      // Enforce chapter against category's valid chapters, fallback to "Miscellaneous"
-      const validChapters = VALID_CHAPTERS_BY_CATEGORY[category];
-      const rawChapterStr = raw.chapter ? raw.chapter.trim().toLowerCase() : "";
-      
-      // Exact case-insensitive match
-      let chapter = validChapters.find(c => c.toLowerCase() === rawChapterStr);
-      
-      // Fuzzy match: bidirectional contains check
-      // e.g. "Folk Dance" contains "Dance", OR "Dance" is contained in "Folk Dance of India"
-      if (!chapter && rawChapterStr.length >= 3) {
-        chapter = validChapters.find(c => {
-          const cl = c.toLowerCase();
-          return cl !== "miscellaneous" && (
-            rawChapterStr.includes(cl) || cl.includes(rawChapterStr)
-          );
-        });
-      }
-      
-      // Word overlap match: if 2+ words match between AI output and valid chapter
-      if (!chapter && rawChapterStr.length >= 3) {
-        const rawWords = rawChapterStr.split(/\s+/).filter(w => w.length >= 3);
-        chapter = validChapters.find(c => {
-          if (c === "Miscellaneous") return false;
-          const chapterWords = c.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
-          const overlap = rawWords.filter(w => chapterWords.some(cw => cw.includes(w) || w.includes(cw)));
-          return overlap.length >= 1;
-        });
-      }
-      
-      chapter = chapter || "Miscellaneous";
-
       // Normalize difficulty — fallback to "medium"
       const difficulty: ValidDifficulty = normalizeDifficulty(raw.difficulty ?? "medium");
 
@@ -253,7 +218,6 @@ export const validationService = {
         difficulty,
         topic,
         category,
-        chapter,
         examName: raw.exam_name || null,
       });
     }
@@ -293,36 +257,6 @@ export const validationService = {
     // Enforce category
     const category: ValidCategory =
       normalizeCategory(raw.category) ?? "Miscellaneous";
-
-    // Enforce chapter
-    const validChapters = VALID_CHAPTERS_BY_CATEGORY[category];
-    const rawChapterStr = raw.chapter ? raw.chapter.trim().toLowerCase() : "";
-    
-    // Exact case-insensitive match
-    let chapter = validChapters.find(c => c.toLowerCase() === rawChapterStr);
-    
-    // Fuzzy match: bidirectional contains check
-    if (!chapter && rawChapterStr.length >= 3) {
-      chapter = validChapters.find(c => {
-        const cl = c.toLowerCase();
-        return cl !== "miscellaneous" && (
-          rawChapterStr.includes(cl) || cl.includes(rawChapterStr)
-        );
-      });
-    }
-    
-    // Word overlap match
-    if (!chapter && rawChapterStr.length >= 3) {
-      const rawWords = rawChapterStr.split(/\s+/).filter(w => w.length >= 3);
-      chapter = validChapters.find(c => {
-        if (c === "Miscellaneous") return false;
-        const chapterWords = c.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
-        const overlap = rawWords.filter(w => chapterWords.some(cw => cw.includes(w) || w.includes(cw)));
-        return overlap.length >= 1;
-      });
-    }
-    
-    chapter = chapter || "Miscellaneous";
 
     // Normalize topic name
     const topic = normalizeTopic(raw.topic);
@@ -369,7 +303,6 @@ export const validationService = {
     return ok({
       topic,
       category,
-      chapter,
       keywords,
       keyFacts,
       sscTraps: normalizeText(raw.ssc_traps ?? ""),

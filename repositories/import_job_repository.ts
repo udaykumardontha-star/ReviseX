@@ -25,7 +25,6 @@ export type CreateImportJobInput = {
   sourceId: number;
   totalPages: number;
   forcedCategory?: string | undefined;
-  forcedChapter?: string | undefined;
   textContent?: string | undefined;
 };
 
@@ -73,7 +72,6 @@ export const importJobRepository = {
         sourceId: input.sourceId,
         totalPages: input.totalPages,
         forcedCategory: input.forcedCategory || null,
-        forcedChapter: input.forcedChapter || null,
         textContent: input.textContent || null,
         currentPage: 0,
         extractedQuestions: 0,

@@ -50,6 +50,13 @@
       "when": 1782030319649,
       "tag": "0006_woozy_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1782032670596,
+      "tag": "0007_salty_raider",
+      "breakpoints": true
     }
   ]
 }

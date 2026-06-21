@@ -52,7 +52,6 @@ export type QuestionFilterOptions = {
   topicId?: number;
   sourceId?: number;
   category?: ValidCategory;
-  chapter?: string;
   subject?: "GK" | "English";
   difficulty?: ValidDifficulty;
   isBookmarked?: boolean;
@@ -261,7 +260,6 @@ export const questionRepository = {
       topicId,
       sourceId,
       category,
-      chapter,
       subject,
       difficulty,
       isBookmarked,
@@ -289,10 +287,6 @@ export const questionRepository = {
     if (category !== undefined) {
       conditions.push("q.category = ?");
       params.push(category);
-    }
-    if (chapter !== undefined) {
-      conditions.push("t.chapter = ?");
-      params.push(chapter);
     }
     if (difficulty !== undefined) {
       conditions.push("q.difficulty = ?");
