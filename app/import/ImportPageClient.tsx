@@ -35,34 +35,6 @@ const ACCEPTED_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/web
 const ACCEPTED_EXT   = ".pdf,.png,.jpg,.jpeg,.webp";
 
 // Dynamically load PDF.js from CDN
-async function extractTextFromPDF(file: File): Promise<string> {
-  // @ts-ignore
-  if (!window.pdfjsLib) {
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-    document.head.appendChild(script);
-    await new Promise((resolve) => {
-      script.onload = resolve;
-    });
-    // @ts-ignore
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-  }
-
-  // @ts-ignore
-  const pdfjsLib = window.pdfjsLib;
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  
-  let fullText = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items.map((item: any) => item.str).join(" ");
-    fullText += pageText + "\n\n";
-  }
-  
-  return fullText.trim();
-}
 
 async function resizeImageIfNeeded(file: File, maxMb: number = 4): Promise<File> {
   if (file.size <= maxMb * 1024 * 1024) return file; // no resize needed
@@ -234,12 +206,7 @@ export function ImportPageClient() {
         let startRes: Response;
         let finalMode = mode;
         let finalFile = currentFile;
-        let extractedPdfText = "";
-
-        if (mode === "file" && currentFile?.type === "application/pdf") {
-          extractedPdfText = await extractTextFromPDF(currentFile);
-          finalMode = "text";
-        } else if (mode === "file" && currentFile?.type.startsWith("image/")) {
+        if (mode === "file" && currentFile?.type.startsWith("image/")) {
           finalFile = await resizeImageIfNeeded(currentFile);
         }
 
@@ -248,7 +215,7 @@ export function ImportPageClient() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              textContent: extractedPdfText || textContent.trim(),
+              textContent: textContent.trim(),
               sourceName: currentFile ? currentFile.name : "Manual Paste",
               fileName: currentFile ? currentFile.name : `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
               ...(forcedCategory !== "Auto-Detect" && { forcedCategory }),

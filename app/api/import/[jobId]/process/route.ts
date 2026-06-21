@@ -16,59 +16,51 @@ export async function POST(
 
   try {
     const contentType = req.headers.get("content-type") ?? "";
+    let result;
 
-    // ── TEXT import — JSON body ──────────────────────────────────────────
     if (contentType.includes("application/json")) {
       const bodyText = await req.text();
       const body = bodyText ? JSON.parse(bodyText) as { textContent?: string } : {};
       const textContent = body.textContent?.trim();
 
-      const result = await importService.processImport(
+      result = await importService.processImport(
         jobId,
         null,          // no file buffer for text imports
         "text/plain",
         textContent
       );
+    } else {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
 
-      if (!result.success) {
-        const statusCode = result.code === "AI_RATE_LIMIT" ? 429 : 500;
-        return NextResponse.json({ error: result.error, code: result.code }, { status: statusCode });
+      if (!file) {
+        return NextResponse.json({ error: "File required for processing" }, { status: 400 });
       }
 
-      // If QStash is enabled and not completed, hand off the rest of the chunks to the background queue
-      if (!result.data.isCompleted && process.env.QSTASH_TOKEN) {
-        const { qstashClient } = await import("@/lib/qstash");
-        if (qstashClient) {
-          const url = new URL("/api/qstash/process-chunk", req.url).toString();
-          await qstashClient.publishJSON({ url, body: { jobId } });
-          console.log(`[QStash] Handoff successful for job ${jobId}. Returning to client.`);
-          return NextResponse.json({ ...result.data, isCompleted: true, background: true });
-        }
-      }
+      const mimeType = file.type === "image/jpg" ? "image/jpeg" : file.type;
+      const buffer = Buffer.from(await file.arrayBuffer());
 
-      return NextResponse.json(result.data);
+      result = await importService.processImport(
+        jobId,
+        buffer,
+        mimeType
+      );
     }
-
-    // ── FILE import — multipart/form-data (PDF or image) ─────────────────
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-
-    if (!file) {
-      return NextResponse.json({ error: "File required for processing" }, { status: 400 });
-    }
-
-    const mimeType = file.type === "image/jpg" ? "image/jpeg" : file.type;
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    const result = await importService.processImport(
-      jobId,
-      buffer,
-      mimeType
-    );
 
     if (!result.success) {
       const statusCode = result.code === "AI_RATE_LIMIT" ? 429 : 500;
       return NextResponse.json({ error: result.error, code: result.code }, { status: statusCode });
+    }
+
+    // If QStash is enabled and not completed, hand off the rest of the chunks to the background queue
+    if (!result.data.isCompleted && process.env.QSTASH_TOKEN) {
+      const { qstashClient } = await import("@/lib/qstash");
+      if (qstashClient) {
+        const url = new URL("/api/qstash/process-chunk", req.url).toString();
+        await qstashClient.publishJSON({ url, body: { jobId } });
+        console.log(`[QStash] Handoff successful for job ${jobId}. Returning to client.`);
+        return NextResponse.json({ ...result.data, isCompleted: true, background: true });
+      }
     }
 
     return NextResponse.json(result.data);
