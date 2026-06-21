@@ -192,7 +192,7 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
                   </div>
                 </div>
 
-                <div className="question-options">
+                <div className={`question-options ${isRevealed ? "is-revealed" : ""}`}>
                   {(["A", "B", "C", "D"] as const).map((opt) => {
                     const text = ({ A: q.optionA, B: q.optionB, C: q.optionC, D: q.optionD })[opt];
                     const selectedOpt = revealed[q.id];

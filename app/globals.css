@@ -460,7 +460,7 @@ code, pre, kbd { font-family: 'JetBrains Mono', monospace; }
   transition: all var(--transition);
   position: relative;
 }
-.q-option:hover { background: var(--primary-light); border-color: var(--primary); }
+.question-options:not(.is-revealed) .q-option:hover { background: var(--primary-light); border-color: var(--primary); }
 .q-option.selected { border-color: var(--primary); background: var(--primary-light); }
 .q-option.correct-reveal { border-color: var(--success); background: #d4f5dd; color: #1a7d35; }
 .q-option.wrong-reveal { border-color: var(--danger); background: #ffe5e3; }
@@ -658,7 +658,8 @@ code, pre, kbd { font-family: 'JetBrains Mono', monospace; }
   cursor: pointer; font-size: 13px; transition: all 0.15s ease;
   background: var(--surface-2);
 }
-.q-option:hover { border-color: var(--primary); background: var(--primary-light); }
+.question-options:not(.is-revealed) .q-option:hover { border-color: var(--primary); background: var(--primary-light); }
+.question-options.is-revealed .q-option { cursor: default; }
 .q-option.correct-reveal { background: #f0fdf4; border-color: var(--success); color: #1a5c2e; font-weight: 600; }
 .q-option-label { font-weight: 700; color: var(--text-muted); min-width: 20px; flex-shrink: 0; }
 

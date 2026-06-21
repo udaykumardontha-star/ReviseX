@@ -289,7 +289,7 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
                   {q.examName && <span className="badge badge-purple" style={{ fontWeight: 600 }}>🏛️ {q.examName}</span>}
                 </div>
               </div>
-              <div className="question-options">
+              <div className={`question-options ${revealed[q.id] ? "is-revealed" : ""}`}>
                 {(["A", "B", "C", "D"] as const).map((opt) => {
                   const optText = ({ A: q.optionA, B: q.optionB, C: q.optionC, D: q.optionD })[opt];
                   const selectedOpt = revealed[q.id];
