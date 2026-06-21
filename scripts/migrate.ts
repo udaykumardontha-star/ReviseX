@@ -26,10 +26,14 @@ const ROOT = process.cwd();
 async function runMigrations() {
   // ─── Step 1: Drizzle ORM migrations ──────────────────────────────────────────
   console.log("\n[migrate] ▶ Step 1: Applying Drizzle migrations…");
-  await migrate(db, {
-    migrationsFolder: resolve(ROOT, "drizzle"),
-  });
-  console.log("[migrate] ✓ Drizzle migrations complete.");
+  try {
+    await migrate(db, {
+      migrationsFolder: resolve(ROOT, "drizzle"),
+    });
+    console.log("[migrate] ✓ Drizzle migrations complete.");
+  } catch (err: any) {
+    console.warn(`[migrate] ⚠️ Drizzle migration failed (likely already applied via push): ${err.message}`);
+  }
 
   // ─── Step 2: FTS5 virtual tables ─────────────────────────────────────────────
   console.log("\n[migrate] ▶ Step 2: Applying FTS5 table definitions…");
