@@ -171,7 +171,7 @@ export function ReviewPageClient({ jobId }: { jobId: number }) {
             <span style={{ color: "var(--border)" }}>/</span>
             <span style={{ fontSize: 13, fontWeight: 600 }}>Job #{jobId} Review</span>
           </div>
-          <h1 className="page-title" style={{ marginTop: 6 }}>Review Questions 👁️</h1>
+          <h1 className="page-title" style={{ marginTop: 6 }}>Review Questions</h1>
         </div>
         <div className="page-header-actions">
           <button className="btn btn-secondary btn-sm" onClick={approveAll} disabled={!stats?.pending}>

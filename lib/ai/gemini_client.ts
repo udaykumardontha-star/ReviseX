@@ -82,7 +82,7 @@ Output format:
       "category": "Predefined category name",
       "chapter": "Predefined chapter name from the mapping",
       "topic": "Highly specific dynamic micro-topic name",
-      "exam_name": "ONLY extract the exam name if it is explicitly mentioned in the text (e.g. 'SSC CGL 2023 Tier 1'). Do NOT guess or hallucinate. If not explicitly mentioned, omit this field or set to null."
+      "exam_name": "Extract the exam name and year if it appears anywhere near the question (e.g., 'SSC CGL 2023 Tier 1', 'RRB NTPC 2019', 'CDS 2021'). Look carefully at prefixes or suffixes like (SSC CHSL 2021). If not found, return null."
     }
   ]
 }`;

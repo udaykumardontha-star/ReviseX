@@ -185,9 +185,9 @@ export function TopicDetailClient({ slug, initialTopic, initialNote }: Props) {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div className="tabs">
           {[
+            { id: "facts" as const, label: `💡 Key Facts (${noteData?.facts.length ?? 0})` },
             { id: "note" as const, label: "📝 Revision Note" },
             { id: "questions" as const, label: `❓ Questions (${topic?.totalQuestions ?? 0})` },
-            { id: "facts" as const, label: `💡 Key Facts (${noteData?.facts.length ?? 0})` },
           ].map((t) => (
             <button key={t.id} className={`tab ${activeTab === t.id ? "active" : ""}`} onClick={() => setActiveTab(t.id)}>
               {t.label}
