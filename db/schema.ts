@@ -196,6 +196,8 @@ export const importJobs = sqliteTable(
     extractedQuestions: integer("extracted_questions").notNull().default(0),
     estimatedRemainingSeconds: integer("estimated_remaining_seconds"),
     failedPagesJson: text("failed_pages_json").notNull().default("[]"),
+    forcedCategory: text("forced_category"),
+    forcedChapter: text("forced_chapter"),
     status: text("status", {
       enum: ["queued", "processing", "completed", "failed", "paused"],
     })

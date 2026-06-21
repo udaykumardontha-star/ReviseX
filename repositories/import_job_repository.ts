@@ -24,6 +24,8 @@ export type CreateImportJobInput = {
   fileHash: string;
   sourceId: number;
   totalPages: number;
+  forcedCategory?: string;
+  forcedChapter?: string;
 };
 
 export type ImportJobUpdate = {
@@ -69,6 +71,8 @@ export const importJobRepository = {
         fileHash: input.fileHash,
         sourceId: input.sourceId,
         totalPages: input.totalPages,
+        forcedCategory: input.forcedCategory,
+        forcedChapter: input.forcedChapter,
         currentPage: 0,
         extractedQuestions: 0,
         failedPagesJson: "[]",

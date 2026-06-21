@@ -26,14 +26,14 @@ const DIFF_COLOR: Record<string, string> = { easy: "badge-green", medium: "badge
 
 const listCache = new Map<string, ListData>();
 
-export function QuestionsPageClient() {
+export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
   const [data, setData] = useState<ListData | null>(null);
   const [loading, setLoading] = useState(true);
   const [subject, setSubject] = useState("All");
   const [section, setSection] = useState("All");
   const [difficulty, setDifficulty] = useState("All");
   const [bookmarkedOnly, setBookmarkedOnly] = useState(false);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQ);
   const [page, setPage] = useState(1);
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const [bookmarks, setBookmarks] = useState<Record<number, boolean>>({});

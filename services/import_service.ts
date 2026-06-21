@@ -49,6 +49,8 @@ export type StartImportInput = {
   fileName: string;
   /** Source label e.g. "CGL 2023 Tier-1" */
   sourceName: string;
+  forcedCategory?: string;
+  forcedChapter?: string;
 };
 
 export type ImportStartResult = {
@@ -250,7 +252,7 @@ export const importService = {
 
         const stageResult = await stageQuestionsFromAiResponse(
           aiResult.data,
-          jobId,
+          job,
           maxQuestionsPerChunk
         );
         totalExtracted += stageResult.inserted;
@@ -310,7 +312,7 @@ export const importService = {
 
       const stageResult = await stageQuestionsFromAiResponse(
         aiResult.data,
-        jobId,
+        job,
         maxQuestionsPerChunk
       );
       totalExtracted += stageResult.inserted;
@@ -387,7 +389,7 @@ export const importService = {
 
       const stageResult = await stageQuestionsFromAiResponse(
         aiResult.data,
-        jobId,
+        job,
         maxQuestionsPerChunk
       );
       totalExtracted += stageResult.inserted;
@@ -468,7 +470,7 @@ export const importService = {
  */
 async function stageQuestionsFromAiResponse(
   rawJson: string,
-  jobId: number,
+  job: ImportJob,
   maxQuestionsPerChunk: number
 ): Promise<{ inserted: number; skipped: number }> {
   const parseResult = validationService.parseJson(rawJson);
@@ -481,15 +483,15 @@ async function stageQuestionsFromAiResponse(
   const skipped = validateResult.data.length - validQuestions.length;
 
   const stageInputs = validQuestions.map((q) => ({
-    importJobId: jobId,
+    importJobId: job.id,
     question: q.question,
     options: { A: q.optionA, B: q.optionB, C: q.optionC, D: q.optionD },
     answer: q.correctOption,
     explanation: q.shortExplanation,
     difficulty: q.difficulty,
     topic: q.topic,
-    category: q.category,
-    chapter: q.chapter,
+    category: job.forcedCategory || q.category,
+    chapter: job.forcedChapter || q.chapter,
     examName: q.examName ?? null,
   }));
 

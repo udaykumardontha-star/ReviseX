@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { VALID_CATEGORIES, VALID_CHAPTERS_BY_CATEGORY } from "@/db/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,6 +112,9 @@ export function ImportPageClient() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [forcedCategory, setForcedCategory] = useState("Auto-Detect");
+  const [forcedChapter, setForcedChapter] = useState("Auto-Detect");
 
   // ── Jobs list ─────────────────────────────────────────────────────────
   const [jobsData, setJobsData] = useState<JobsData | null>(null);
@@ -246,12 +250,17 @@ export function ImportPageClient() {
             textContent: extractedPdfText || textContent.trim(),
             sourceName: file ? file.name : "Manual Paste",
             fileName: file ? file.name : `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
+            ...(forcedCategory !== "Auto-Detect" && { forcedCategory }),
+            ...(forcedChapter !== "Auto-Detect" && { forcedChapter }),
           }),
         });
       } else {
         const formData = new FormData();
         formData.append("file", finalFile!);
         formData.append("source", finalFile!.name);
+        if (forcedCategory !== "Auto-Detect") formData.append("forcedCategory", forcedCategory);
+        if (forcedChapter !== "Auto-Detect") formData.append("forcedChapter", forcedChapter);
+        
         startRes = await fetch("/api/import", { method: "POST", body: formData });
       }
 
