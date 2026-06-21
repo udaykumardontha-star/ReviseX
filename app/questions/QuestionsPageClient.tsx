@@ -232,7 +232,7 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
                     )}
                   </div>
                   {!isRevealed && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => reveal(q.id)}>Reveal Answer</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => reveal(q.id, "revealed")}>Reveal Answer</button>
                   )}
                 </div>
               </div>
