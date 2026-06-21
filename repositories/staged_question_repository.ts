@@ -395,6 +395,24 @@ export const stagedQuestionRepository = {
   },
 
   /**
+   * Deletes ONLY approved staged questions for an import job.
+   * Used after successful promotion.
+   */
+  async deleteApproved(importJobId: number): Promise<number> {
+    const result = await db
+      .delete(stagedQuestions)
+      .where(
+        and(
+          eq(stagedQuestions.importJobId, importJobId),
+          eq(stagedQuestions.status, "approved")
+        )
+      )
+      .returning()
+      .all();
+    return result.length;
+  },
+
+  /**
    * Parses the JSON `options` field into a typed object.
    * Helper used by the review UI to render MCQ options.
    */

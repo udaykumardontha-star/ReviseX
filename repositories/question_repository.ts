@@ -126,51 +126,50 @@ export const questionRepository = {
   ): Promise<{ inserted: number; skipped: number }> {
     if (inputs.length === 0) return { inserted: 0, skipped: 0 };
 
-    let inserted = 0;
-    let skipped = 0;
     const now = new Date().toISOString();
 
     return await db.transaction(async (tx) => {
-      for (const input of inputs) {
-        try {
-          const result = await tx
-            .insert(questions)
-            .values({
-              questionHash: input.questionHash,
-              topicId: input.topicId,
-              sourceId: input.sourceId,
-              category: input.category,
-              examName: input.examName ?? null,
-              difficulty: input.difficulty,
-              question: input.question,
-              optionA: input.optionA,
-              optionB: input.optionB,
-              optionC: input.optionC,
-              optionD: input.optionD,
-              correctOption: input.correctOption,
-              shortExplanation: input.shortExplanation ?? null,
-              sourceType: input.sourceType ?? null,
-              pageNumber: input.pageNumber ?? null,
-              timesViewed: 0,
-              timesRevised: 0,
-              isDeleted: false,
-              createdAt: now,
-              updatedAt: now,
-            })
-            .onConflictDoNothing()
-            .returning()
-            .get();
+      // Drizzle ORM supports batch inserts, but we must chunk them to avoid SQLite binding limits (max 32766 variables).
+      // Each question has ~15 columns. 32766 / 15 = ~2184 max rows per insert.
+      // We'll chunk safely at 500 rows.
+      const CHUNK_SIZE = 500;
+      let insertedCount = 0;
 
-          if (result) {
-            inserted++;
-          } else {
-            skipped++;
-          }
-        } catch {
-          skipped++;
-        }
+      for (let i = 0; i < inputs.length; i += CHUNK_SIZE) {
+        const chunk = inputs.slice(i, i + CHUNK_SIZE);
+        const valuesToInsert = chunk.map(input => ({
+          questionHash: input.questionHash,
+          topicId: input.topicId,
+          sourceId: input.sourceId,
+          category: input.category,
+          examName: input.examName ?? null,
+          difficulty: input.difficulty,
+          question: input.question,
+          optionA: input.optionA,
+          optionB: input.optionB,
+          optionC: input.optionC,
+          optionD: input.optionD,
+          correctOption: input.correctOption,
+          shortExplanation: input.shortExplanation ?? null,
+          sourceType: input.sourceType ?? null,
+          pageNumber: input.pageNumber ?? null,
+          timesViewed: 0,
+          timesRevised: 0,
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        }));
+
+        const result = await tx
+          .insert(questions)
+          .values(valuesToInsert)
+          .onConflictDoNothing({ target: questions.questionHash })
+          .run();
+          
+        insertedCount += result.rowsAffected;
       }
-      return { inserted, skipped };
+
+      return { inserted: insertedCount, skipped: inputs.length - insertedCount };
     });
   },
 

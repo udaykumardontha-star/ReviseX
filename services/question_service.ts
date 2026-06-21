@@ -22,7 +22,7 @@ import {
   stagedQuestionRepository,
   importJobRepository,
 } from "@/repositories";
-import type { QuestionFilterOptions } from "@/repositories";
+import type { QuestionFilterOptions, CreateQuestionInput } from "@/repositories";
 import { hashQuestion } from "@/lib/utils/hasher";
 import { toSlug } from "@/lib/utils/slugifier";
 import { normalizeTopic } from "@/lib/utils/normalizer";
@@ -71,7 +71,7 @@ export const questionService = {
    */
   async promoteApprovedQuestions(
     importJobId: number
-  ): Promise<Result<PromoteQuestionsResult>> {
+  ): Promise<Result<{ promoted: number; skipped: number; topicsCreated: number }>> {
     const job = await importJobRepository.findById(importJobId);
     if (!job) {
       return err(`Import job #${importJobId} not found`, null, "NOT_FOUND");
@@ -87,42 +87,45 @@ export const questionService = {
       return ok({ promoted: 0, skipped: 0, topicsCreated: 0 });
     }
 
-    let promoted = 0;
-    let skipped = 0;
     let topicsCreated = 0;
+    
+    // 1. Cache topics to avoid N+1 DB queries
+    const topicCache = new Map<string, number>(); // normalizedName -> topicId
+    const uniqueTopicsToRefresh = new Set<number>();
+    const questionsToInsert: CreateQuestionInput[] = [];
 
     for (const staged of approvedStaged) {
-      // ── Database First: resolve topic by alias, then name, then create ──
       const rawTopicName = staged.topic;
       const normalizedName = normalizeTopic(rawTopicName);
       const slug = toSlug(normalizedName);
       const category = staged.category as ValidCategory;
 
-      let topic = await topicRepository.resolveByNameOrAlias(normalizedName);
+      let topicId = topicCache.get(normalizedName);
 
-      if (!topic) {
-        // Create new topic
-        const created = await topicRepository.findOrCreate({
-          slug,
-          name: normalizedName,
-          category,
-        });
-        topic = created;
-        topicsCreated++;
-        // Register the raw AI string as an alias for future dedup
-        await topicRepository.addAlias(topic.id, rawTopicName.toLowerCase().trim());
-      } else {
-        // Register the alias even if topic already exists
-        await topicRepository.addAlias(topic.id, rawTopicName.toLowerCase().trim());
+      if (!topicId) {
+        let topic = await topicRepository.resolveByNameOrAlias(normalizedName);
+        if (!topic) {
+          topic = await topicRepository.findOrCreate({
+            slug,
+            name: normalizedName,
+            category,
+          });
+          topicsCreated++;
+          await topicRepository.addAlias(topic.id, rawTopicName.toLowerCase().trim());
+        } else {
+          await topicRepository.addAlias(topic.id, rawTopicName.toLowerCase().trim());
+        }
+        topicId = topic.id;
+        topicCache.set(normalizedName, topicId);
       }
 
-      // Hash the question for deduplication
+      uniqueTopicsToRefresh.add(topicId);
+
       const questionHash = hashQuestion(staged.question);
 
-      // Attempt insert (skip if hash collision)
-      const inserted = await questionRepository.create({
+      questionsToInsert.push({
         questionHash,
-        topicId: topic.id,
+        topicId,
         sourceId: source.id,
         category: staged.category as ValidCategory,
         difficulty: staged.difficulty as ValidDifficulty,
@@ -136,20 +139,23 @@ export const questionService = {
         sourceType: job.fileName,
         examName: staged.examName ?? null,
       });
-
-      if (inserted) {
-        promoted++;
-        // Mark topic as needing note refresh since it gained new questions
-        await topicRepository.markNeedsRefresh(topic.id);
-      } else {
-        skipped++;
-      }
     }
+
+    // 2. Bulk insert all questions
+    const { inserted, skipped } = await questionRepository.createMany(questionsToInsert);
+
+    // 3. Mark affected topics as needing refresh
+    for (const tid of uniqueTopicsToRefresh) {
+      await topicRepository.markNeedsRefresh(tid);
+    }
+
+    // 4. Delete the successfully promoted staged questions
+    await stagedQuestionRepository.deleteApproved(importJobId);
 
     // Recalculate source counter after bulk promotion
     await sourceRepository.recalculateTotalQuestions(source.id);
 
-    return ok({ promoted, skipped, topicsCreated });
+    return ok({ promoted: inserted, skipped, topicsCreated });
   },
 
   /**
