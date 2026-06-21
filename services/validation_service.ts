@@ -203,10 +203,17 @@ export const validationService = {
 
       // Enforce chapter against category's valid chapters, fallback to "Miscellaneous"
       const validChapters = VALID_CHAPTERS_BY_CATEGORY[category];
-      let chapter = raw.chapter.trim();
-      if (!validChapters.includes(chapter)) {
-        chapter = "Miscellaneous";
+      const rawChapterStr = raw.chapter ? raw.chapter.trim().toLowerCase() : "";
+      
+      // Exact case-insensitive match
+      let chapter = validChapters.find(c => c.toLowerCase() === rawChapterStr);
+      
+      // Fuzzy match: check if raw string contains the valid chapter (e.g. "Folk Dance" contains "Dance")
+      if (!chapter) {
+        chapter = validChapters.find(c => rawChapterStr.includes(c.toLowerCase()));
       }
+      
+      chapter = chapter || "Miscellaneous";
 
       // Normalize difficulty — fallback to "medium"
       const difficulty: ValidDifficulty = normalizeDifficulty(raw.difficulty ?? "medium");
@@ -272,10 +279,17 @@ export const validationService = {
 
     // Enforce chapter
     const validChapters = VALID_CHAPTERS_BY_CATEGORY[category];
-    let chapter = raw.chapter.trim();
-    if (!validChapters.includes(chapter)) {
-      chapter = "Miscellaneous";
+    const rawChapterStr = raw.chapter ? raw.chapter.trim().toLowerCase() : "";
+    
+    // Exact case-insensitive match
+    let chapter = validChapters.find(c => c.toLowerCase() === rawChapterStr);
+    
+    // Fuzzy match
+    if (!chapter) {
+      chapter = validChapters.find(c => rawChapterStr.includes(c.toLowerCase()));
     }
+    
+    chapter = chapter || "Miscellaneous";
 
     // Normalize topic name
     const topic = normalizeTopic(raw.topic);
