@@ -391,46 +391,44 @@ export function ImportPageClient() {
             <>
               {/* Drop Zone */}
               <div
-                className={`drop-zone ${dragging ? "dragging" : ""} ${file ? "has-file" : ""}`}
+                className={`drop-zone ${dragging ? "dragging" : ""} ${files.length > 0 ? "has-file" : ""}`}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
                 onDragLeave={() => setDragging(false)}
-                onClick={() => !file && fileInputRef.current?.click()}
+                onClick={() => files.length === 0 && fileInputRef.current?.click()}
               >
-                {file ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                    {imagePreview ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        style={{ maxHeight: 200, maxWidth: "100%", borderRadius: "var(--radius-md)", objectFit: "contain" }}
-                      />
-                    ) : (
-                      <div style={{ fontSize: 40 }}>📄</div>
-                    )}
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontWeight: 700, fontSize: 15 }}>{file.name}</div>
-                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                        {(file.size / 1024).toFixed(0)} KB · {file.type}
-                      </div>
+                {files.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, maxWidth: "100%" }}>
+                      {files.map((f, i) => (
+                        <div key={i} style={{ flexShrink: 0, width: 120, border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: 8, backgroundColor: "var(--surface-1)" }}>
+                          {f.type.startsWith("image/") && i === 0 && imagePreview ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={imagePreview} alt="Preview" style={{ width: "100%", height: 80, objectFit: "cover", borderRadius: 4 }} />
+                          ) : (
+                            <div style={{ height: 80, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>{f.type.startsWith("image/") ? "🖼️" : "📄"}</div>
+                          )}
+                          <div style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 4, fontWeight: 600 }}>{f.name}</div>
+                          <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{(f.size / 1024).toFixed(0)} KB</div>
+                        </div>
+                      ))}
                     </div>
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
                       onClick={(e) => { e.stopPropagation(); clearFile(); }}
                     >
-                      ✕ Remove
+                      ✕ Clear {files.length} file{files.length !== 1 ? "s" : ""}
                     </button>
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                     <div style={{ fontSize: 44 }}>📁</div>
                     <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>
-                      Paste Text, Upload PDF, or Add Screenshot
+                      Paste Text, Upload PDF, or Add Screenshots
                     </div>
                     <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                      Drag & drop here · Click to browse · <kbd style={{ padding: "2px 6px", background: "var(--surface-2)", borderRadius: 4, fontSize: 11 }}>Ctrl+V</kbd> to paste screenshot
+                      Drag & drop multiple files · Click to browse · <kbd style={{ padding: "2px 6px", background: "var(--surface-2)", borderRadius: 4, fontSize: 11 }}>Ctrl+V</kbd> to paste
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
                       {["PDF", "PNG", "JPG", "JPEG", "WEBP"].map((t) => (
@@ -443,11 +441,12 @@ export function ImportPageClient() {
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept={ACCEPTED_EXT}
                 style={{ display: "none" }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelected(f); }}
+                onChange={(e) => { const fs = Array.from(e.target.files || []); if (fs.length > 0) handleFilesSelected(fs); }}
               />
-              {!file && (
+              {files.length === 0 && (
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -541,7 +540,7 @@ export function ImportPageClient() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={isLoading || (mode === "file" ? !file : !textContent.trim())}
+              disabled={isLoading || (mode === "file" ? files.length === 0 : !textContent.trim())}
             >
               {uploading ? (
                 <><div className="spinner" /> Creating job…</>
@@ -560,7 +559,7 @@ export function ImportPageClient() {
         </form>
 
         {/* Ctrl+V hint */}
-        {mode === "file" && !file && (
+        {mode === "file" && files.length === 0 && (
           <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--surface-2)", borderRadius: "var(--radius-sm)", fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 8, alignItems: "center" }}>
             <span>💡</span>
             <span>
