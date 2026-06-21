@@ -104,7 +104,7 @@ async function resizeImageIfNeeded(file: File, maxMb: number = 4): Promise<File>
 export function ImportPageClient() {
   // ── Upload state ──────────────────────────────────────────────────────
   const [mode, setMode] = useState<ImportMode>("file");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [textContent, setTextContent] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -145,7 +145,7 @@ export function ImportPageClient() {
           const blob = item.getAsFile();
           if (blob) {
             const imgFile = new File([blob], `clipboard-${Date.now()}.png`, { type: item.type });
-            handleFileSelected(imgFile);
+            handleFilesSelected([imgFile]);
             return;
           }
         }
@@ -170,26 +170,28 @@ export function ImportPageClient() {
   }, []);
 
   // ── File selection ────────────────────────────────────────────────────
-  const handleFileSelected = (f: File) => {
+  const handleFilesSelected = (fList: File[]) => {
     setError("");
     setSuccess("");
 
-    const type = f.type === "image/jpg" ? "image/jpeg" : f.type;
-    if (!ACCEPTED_TYPES.includes(type) && !ACCEPTED_TYPES.includes(f.type)) {
-      setError(`Unsupported file type: ${f.type}. Accepted: PDF, PNG, JPG, JPEG, WEBP`);
+    const validFiles = fList.filter(f => {
+      const type = f.type === "image/jpg" ? "image/jpeg" : f.type;
+      return ACCEPTED_TYPES.includes(type) || ACCEPTED_TYPES.includes(f.type);
+    });
+
+    if (validFiles.length === 0) {
+      setError(`No valid files selected. Accepted: PDF, PNG, JPG, JPEG, WEBP`);
       return;
     }
 
-    setFile(f);
+    setFiles(prev => [...prev, ...validFiles]);
     setMode("file");
 
-    // Generate preview for images
-    if (type.startsWith("image/")) {
+    const firstImg = validFiles.find(f => f.type.startsWith("image/"));
+    if (!imagePreview && firstImg) {
       const reader = new FileReader();
       reader.onload = (e) => setImagePreview(e.target?.result as string);
-      reader.readAsDataURL(f);
-    } else {
-      setImagePreview(null);
+      reader.readAsDataURL(firstImg);
     }
   };
 
@@ -197,8 +199,8 @@ export function ImportPageClient() {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    const f = e.dataTransfer.files[0];
-    if (f) handleFileSelected(f);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 0) handleFilesSelected(droppedFiles);
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -216,117 +218,120 @@ export function ImportPageClient() {
       setError("Please paste or type some text to extract questions from.");
       return;
     }
-    if (mode === "file" && !file) {
-      setError("Please select or drop a file.");
+    if (mode === "file" && files.length === 0) {
+      setError("Please select or drop files.");
       return;
     }
 
     setUploading(true);
-    let startData: ImportStartResult;
+    let totalSuccessCount = 0;
+    let totalSkippedCount = 0;
 
     try {
-      // ── STAGE 1: Create import job ──────────────────────────────────
-      let startRes: Response;
-      let finalMode = mode;
-      let finalFile = file;
-      let extractedPdfText = "";
+      const itemsToProcess = mode === "text" ? [null] : files;
 
-      // Bypass Vercel 4.5MB limit by extracting PDF text locally
-      if (mode === "file" && file?.type === "application/pdf") {
-        setUploading(true);
-        // Show user we are doing local parsing
-        extractedPdfText = await extractTextFromPDF(file);
-        finalMode = "text";
-      } else if (mode === "file" && file?.type.startsWith("image/")) {
-        setUploading(true);
-        finalFile = await resizeImageIfNeeded(file);
-      }
+      for (const currentFile of itemsToProcess) {
+        // ── STAGE 1: Create import job ──────────────────────────────────
+        let startRes: Response;
+        let finalMode = mode;
+        let finalFile = currentFile;
+        let extractedPdfText = "";
 
-      if (finalMode === "text") {
-        startRes = await fetch("/api/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            textContent: extractedPdfText || textContent.trim(),
-            sourceName: file ? file.name : "Manual Paste",
-            fileName: file ? file.name : `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
-            ...(forcedCategory !== "Auto-Detect" && { forcedCategory }),
-            ...(forcedChapter !== "Auto-Detect" && { forcedChapter }),
-          }),
-        });
-      } else {
-        const formData = new FormData();
-        formData.append("file", finalFile!);
-        formData.append("source", finalFile!.name);
-        if (forcedCategory !== "Auto-Detect") formData.append("forcedCategory", forcedCategory);
-        if (forcedChapter !== "Auto-Detect") formData.append("forcedChapter", forcedChapter);
-        
-        startRes = await fetch("/api/import", { method: "POST", body: formData });
-      }
-
-      const startJson = await startRes.json() as ImportStartResult & { error?: string; code?: string };
-
-      if (!startRes.ok) {
-        if (startJson.code === "DUPLICATE") {
-          setError("⚠️ This file was already imported. No duplicate created.");
-        } else {
-          setError(startJson.error ?? "Failed to start import.");
+        if (mode === "file" && currentFile?.type === "application/pdf") {
+          extractedPdfText = await extractTextFromPDF(currentFile);
+          finalMode = "text";
+        } else if (mode === "file" && currentFile?.type.startsWith("image/")) {
+          finalFile = await resizeImageIfNeeded(currentFile);
         }
-        setUploading(false);
-        return;
-      }
 
-      startData = startJson;
-      setUploading(false);
-      setProcessing(true);
-
-      // ── STAGE 2: Process (AI extraction) in chunks ────────────────────────────
-      let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean } = {
-        totalExtracted: 0,
-        totalSkipped: 0,
-        isCompleted: false,
-      };
-
-      while (!pd.isCompleted) {
-        let processRes: Response;
         if (finalMode === "text") {
-          processRes = await fetch(`/api/import/${startData.jobId}/process`, {
+          startRes = await fetch("/api/import", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ textContent: extractedPdfText || textContent.trim() }),
+            body: JSON.stringify({
+              textContent: extractedPdfText || textContent.trim(),
+              sourceName: currentFile ? currentFile.name : "Manual Paste",
+              fileName: currentFile ? currentFile.name : `Text Import — ${new Date().toLocaleDateString("en-IN")}`,
+              ...(forcedCategory !== "Auto-Detect" && { forcedCategory }),
+              ...(forcedChapter !== "Auto-Detect" && { forcedChapter }),
+            }),
           });
         } else {
-          const processForm = new FormData();
-          processForm.append("file", finalFile!);
-          processRes = await fetch(`/api/import/${startData.jobId}/process`, {
-            method: "POST",
-            body: processForm,
-          });
+          const formData = new FormData();
+          formData.append("file", finalFile!);
+          formData.append("source", finalFile!.name);
+          if (forcedCategory !== "Auto-Detect") formData.append("forcedCategory", forcedCategory);
+          if (forcedChapter !== "Auto-Detect") formData.append("forcedChapter", forcedChapter);
+          
+          startRes = await fetch("/api/import", { method: "POST", body: formData });
         }
 
-        pd = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean };
+        const startJson = await startRes.json() as ImportStartResult & { error?: string; code?: string };
 
-        if (!processRes.ok) {
-          if (pd.code === "AI_RATE_LIMIT") {
-            setError("⚠️ AI daily limit reached. Your job is saved — questions will be extracted tomorrow.");
+        if (!startRes.ok) {
+          if (startJson.code === "DUPLICATE") {
+            setError(prev => prev ? `${prev}\n⚠️ ${currentFile?.name ?? "File"} was already imported.` : `⚠️ ${currentFile?.name ?? "File"} was already imported.`);
           } else {
-            setError(pd.error ?? "Extraction failed.");
+            setError(prev => prev ? `${prev}\n${startJson.error}` : (startJson.error ?? "Failed to start import."));
           }
-          setProcessing(false);
-          void fetchJobs();
-          return;
+          continue; // Skip to next file
         }
 
-        // Refresh UI after each chunk
-        void fetchJobs();
-      }
+        const startData = startJson;
+        setProcessing(true);
+
+        // ── STAGE 2: Process (AI extraction) in chunks ────────────────────────────
+        let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean } = {
+          totalExtracted: 0,
+          totalSkipped: 0,
+          isCompleted: false,
+        };
+
+        while (!pd.isCompleted) {
+          let processRes: Response;
+          if (finalMode === "text") {
+            processRes = await fetch(`/api/import/${startData.jobId}/process`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ textContent: extractedPdfText || textContent.trim() }),
+            });
+          } else {
+            const processForm = new FormData();
+            processForm.append("file", finalFile!);
+            processRes = await fetch(`/api/import/${startData.jobId}/process`, {
+              method: "POST",
+              body: processForm,
+            });
+          }
+
+          pd = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean };
+
+          if (!processRes.ok) {
+            if (pd.code === "AI_RATE_LIMIT") {
+              setError("⚠️ AI daily limit reached. Your job is saved — questions will be extracted tomorrow.");
+              setProcessing(false);
+              void fetchJobs();
+              return; // Stop everything if rate limit
+            } else {
+              setError(prev => prev ? `${prev}\n${pd.error}` : (pd.error ?? "Extraction failed."));
+            }
+            break; // Stop processing this file, move to next
+          }
+
+          // Refresh UI after each chunk
+          void fetchJobs();
+        }
+
+        totalSuccessCount += pd.totalExtracted ?? 0;
+        totalSkippedCount += pd.totalSkipped ?? 0;
+      } // End of loop
 
       setSuccess(
-        `✅ Extracted ${pd.totalExtracted} question${pd.totalExtracted !== 1 ? "s" : ""}!${pd.totalSkipped > 0 ? ` (${pd.totalSkipped} skipped — over limit)` : ""} Go to Review to approve them.`
+        `✅ Finished processing! Extracted ${totalSuccessCount} question${totalSuccessCount !== 1 ? "s" : ""}!${totalSkippedCount > 0 ? ` (${totalSkippedCount} skipped — over limit)` : ""} Go to Review to approve them.`
       );
       
       // Reset form
-      setFile(null);
+      setFiles([]);
       setImagePreview(null);
       setTextContent("");
     } catch {
@@ -338,7 +343,7 @@ export function ImportPageClient() {
   };
 
   const clearFile = () => {
-    setFile(null);
+    setFiles([]);
     setImagePreview(null);
     setError("");
     if (fileInputRef.current) fileInputRef.current.value = "";

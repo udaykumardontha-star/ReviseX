@@ -235,7 +235,7 @@ export function SearchContent({ initialStats }: { initialStats?: { category: str
 export function HomeClient({ initialStats }: { initialStats?: { category: string; count: number }[] }) {
   return (
     <Suspense fallback={<div style={{ padding: 32, textAlign: "center" }}>Loading search…</div>}>
-      <SearchContent initialStats={initialStats} />
+      {initialStats ? <SearchContent initialStats={initialStats} /> : <SearchContent />}
     </Suspense>
   );
 }
