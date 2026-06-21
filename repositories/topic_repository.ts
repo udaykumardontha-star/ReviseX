@@ -209,7 +209,7 @@ export const topicRepository = {
     items: TopicListItem[];
     total: number;
   }> {
-    const { category, status, limit = 50, offset = 0 } = options;
+    const { category, status, search, limit = 50, offset = 0 } = options;
 
     const conditions = [eq(topics.isDeleted, false)];
 
@@ -218,6 +218,9 @@ export const topicRepository = {
     }
     if (status) {
       conditions.push(eq(topics.topicStatus, status));
+    }
+    if (search) {
+      conditions.push(like(sql`lower(${topics.name})`, `%${search.toLowerCase().trim()}%`));
     }
 
     const whereClause = and(...conditions);
