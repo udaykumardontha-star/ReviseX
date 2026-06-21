@@ -280,43 +280,55 @@ export function ImportPageClient() {
       setUploading(false);
       setProcessing(true);
 
-      // ── STAGE 2: Process (AI extraction) ────────────────────────────
-      let processRes: Response;
+      // ── STAGE 2: Process (AI extraction) in chunks ────────────────────────────
+      let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean } = {
+        totalExtracted: 0,
+        totalSkipped: 0,
+        isCompleted: false,
+      };
 
-      if (finalMode === "text") {
-        processRes = await fetch(`/api/import/${startData.jobId}/process`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ textContent: extractedPdfText || textContent.trim() }),
-        });
-      } else {
-        const processForm = new FormData();
-        processForm.append("file", finalFile!);
-        processRes = await fetch(`/api/import/${startData.jobId}/process`, {
-          method: "POST",
-          body: processForm,
-        });
-      }
-
-      const pd = await processRes.json() as ProcessResult & { error?: string; code?: string };
-
-      if (!processRes.ok) {
-        if (pd.code === "AI_RATE_LIMIT") {
-          setError("⚠️ AI daily limit reached. Your job is saved — questions will be extracted tomorrow.");
+      while (!pd.isCompleted) {
+        let processRes: Response;
+        if (finalMode === "text") {
+          processRes = await fetch(`/api/import/${startData.jobId}/process`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ textContent: extractedPdfText || textContent.trim() }),
+          });
         } else {
-          setError(pd.error ?? "Extraction failed.");
+          const processForm = new FormData();
+          processForm.append("file", finalFile!);
+          processRes = await fetch(`/api/import/${startData.jobId}/process`, {
+            method: "POST",
+            body: processForm,
+          });
         }
-      } else {
-        setSuccess(
-          `✅ Extracted ${pd.totalExtracted} question${pd.totalExtracted !== 1 ? "s" : ""}!${pd.totalSkipped > 0 ? ` (${pd.totalSkipped} skipped — over limit)` : ""} Go to Review to approve them.`
-        );
-        // Reset form
-        setFile(null);
-        setImagePreview(null);
-        setTextContent("");
+
+        pd = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean };
+
+        if (!processRes.ok) {
+          if (pd.code === "AI_RATE_LIMIT") {
+            setError("⚠️ AI daily limit reached. Your job is saved — questions will be extracted tomorrow.");
+          } else {
+            setError(pd.error ?? "Extraction failed.");
+          }
+          setProcessing(false);
+          void fetchJobs();
+          return;
+        }
+
+        // Refresh UI after each chunk
+        void fetchJobs();
       }
 
-      void fetchJobs();
+      setSuccess(
+        `✅ Extracted ${pd.totalExtracted} question${pd.totalExtracted !== 1 ? "s" : ""}!${pd.totalSkipped > 0 ? ` (${pd.totalSkipped} skipped — over limit)` : ""} Go to Review to approve them.`
+      );
+      
+      // Reset form
+      setFile(null);
+      setImagePreview(null);
+      setTextContent("");
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -482,42 +494,6 @@ export function ImportPageClient() {
               {success}
             </div>
           )}
-
-          {/* Overrides */}
-          <div style={{ display: "flex", gap: 16, marginTop: 16, marginBottom: 16 }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
-                Force Subject / Category
-              </label>
-              <select
-                className="input"
-                value={forcedCategory}
-                onChange={(e) => { setForcedCategory(e.target.value); setForcedChapter("Auto-Detect"); }}
-                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", backgroundColor: "var(--surface)" }}
-              >
-                <option value="Auto-Detect">✨ Auto-Detect</option>
-                {VALID_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-
-            <div style={{ flex: 1 }}>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
-                Force Chapter / Section
-              </label>
-              <select
-                className="input"
-                value={forcedChapter}
-                onChange={(e) => setForcedChapter(e.target.value)}
-                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", backgroundColor: "var(--surface)" }}
-                disabled={forcedCategory === "Auto-Detect"}
-              >
-                <option value="Auto-Detect">✨ Auto-Detect</option>
-                {forcedCategory !== "Auto-Detect" && VALID_CHAPTERS_BY_CATEGORY[forcedCategory as keyof typeof VALID_CHAPTERS_BY_CATEGORY]?.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          </div>
 
           {/* Overrides */}
           <div style={{ display: "flex", gap: 16, marginTop: 16, marginBottom: 16 }}>

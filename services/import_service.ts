@@ -184,7 +184,7 @@ export const importService = {
     mimeType: string,
     textContent?: string,
     onProgress?: (progress: ImportJobProgress) => void
-  ): Promise<Result<{ totalExtracted: number; totalSkipped: number }>> {
+  ): Promise<Result<{ totalExtracted: number; totalSkipped: number; isCompleted: boolean }>> {
     const job = await importJobRepository.findById(jobId);
     if (!job) {
       return err(`Import job #${jobId} not found`, null, "NOT_FOUND");
@@ -226,8 +226,10 @@ export const importService = {
       }
 
       const { chunks } = textResult.data;
+      const resumeFromChunk = job.currentPage;
 
       for (const chunk of chunks) {
+        if (chunk.chunkIndex < resumeFromChunk) continue;
         if (await settingsRepository.isAiRateLimitReached()) {
           await importJobRepository.markPaused(jobId);
           return err(
@@ -269,10 +271,17 @@ export const importService = {
           const progress = await importJobRepository.getProgress(jobId);
           if (progress) onProgress(progress);
         }
+
+        const isLastChunk = chunk.chunkIndex === chunks.length - 1;
+        if (isLastChunk) {
+          await importJobRepository.markCompleted(jobId, totalExtracted);
+        }
+        return ok({ totalExtracted, totalSkipped, isCompleted: isLastChunk });
       }
 
+      // Fallback if loop ends (shouldn't happen with proper chunking, but safe)
       await importJobRepository.markCompleted(jobId, totalExtracted);
-      return ok({ totalExtracted, totalSkipped });
+      return ok({ totalExtracted, totalSkipped, isCompleted: true });
     }
 
     // ── IMAGE import ──────────────────────────────────────────────────────
@@ -331,7 +340,7 @@ export const importService = {
       }
 
       await importJobRepository.markCompleted(jobId, totalExtracted);
-      return ok({ totalExtracted, totalSkipped });
+      return ok({ totalExtracted, totalSkipped, isCompleted: true });
     }
 
     // ── PDF import ────────────────────────────────────────────────────────
@@ -408,10 +417,17 @@ export const importService = {
         const progress = await importJobRepository.getProgress(jobId);
         if (progress) onProgress(progress);
       }
+
+      const isLastChunk = chunk.chunkIndex === chunks.length - 1;
+      if (isLastChunk) {
+        await importJobRepository.markCompleted(jobId, totalExtracted);
+      }
+      return ok({ totalExtracted, totalSkipped, isCompleted: isLastChunk });
     }
 
+    // Fallback if loop ends
     await importJobRepository.markCompleted(jobId, totalExtracted);
-    return ok({ totalExtracted, totalSkipped });
+    return ok({ totalExtracted, totalSkipped, isCompleted: true });
   },
 
   /** Returns a live progress snapshot for a running import job. */
