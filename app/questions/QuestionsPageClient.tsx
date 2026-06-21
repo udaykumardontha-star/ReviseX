@@ -106,7 +106,7 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
         </span>
-        <input className="input" placeholder="Search questions by keyword…"
+        <input className="input" placeholder="Search questions…"
           value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
       </div>
 
@@ -178,7 +178,7 @@ export function QuestionsPageClient({ initialQ = "" }: { initialQ?: string }) {
               <div key={q.id} className="question-card">
                 <div className="question-card-header">
                   <div className="question-text-main">{q.question}</div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     <span className={`badge ${DIFF_COLOR[q.difficulty] ?? "badge-gray"}`}>{q.difficulty}</span>
                     <span className={`badge ${CATEGORY_COLORS[q.category] ?? "badge-gray"}`}>{q.category}</span>
                     {q.examName && <span className="badge badge-purple" style={{ fontWeight: 600 }}>🏛️ {q.examName}</span>}

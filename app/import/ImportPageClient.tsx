@@ -500,8 +500,8 @@ export function ImportPageClient() {
           )}
 
           {/* Overrides */}
-          <div style={{ display: "flex", gap: 16, marginTop: 16, marginBottom: 16 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", gap: 12, marginTop: 16, marginBottom: 16, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
                 Force Subject / Category
               </label>
@@ -516,7 +516,7 @@ export function ImportPageClient() {
               </select>
             </div>
 
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
                 Force Chapter / Section
               </label>

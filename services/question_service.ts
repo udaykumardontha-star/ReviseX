@@ -136,6 +136,7 @@ export const questionService = {
         correctOption: staged.answer as "A" | "B" | "C" | "D",
         ...(staged.explanation ? { shortExplanation: staged.explanation } : {}),
         sourceType: job.fileName,
+        examName: staged.examName ?? null,
       });
 
       if (inserted) {

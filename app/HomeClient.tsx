@@ -102,24 +102,13 @@ export function SearchContent({ initialStats }: { initialStats?: { category: str
 
       {/* Category Stats Widgets (Only show when not searching) */}
       {!query && initialStats && initialStats.length > 0 && (
-        <div className="card" style={{ padding: "20px" }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Question Bank</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
+        <div className="card">
+          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Question Bank</h2>
+          <div className="stat-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))" }}>
             {initialStats.map((stat) => (
-              <div key={stat.category} style={{
-                padding: "16px", 
-                borderRadius: "12px", 
-                border: "1px solid var(--border)", 
-                backgroundColor: "var(--bg-card)",
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-                alignItems: "center",
-                justifyContent: "center",
-                textAlign: "center"
-              }}>
-                <span style={{ fontSize: 28, fontWeight: 700, color: "var(--primary)" }}>{stat.count}</span>
-                <span className={`badge ${CATEGORY_COLORS[stat.category] ?? "badge-gray"}`} style={{ fontSize: 12 }}>
+              <div key={stat.category} className="stat-card" style={{ alignItems: "center", textAlign: "center", gap: 6 }}>
+                <span style={{ fontSize: 24, fontWeight: 800, color: "var(--primary)", lineHeight: 1 }}>{stat.count}</span>
+                <span className={`badge ${CATEGORY_COLORS[stat.category] ?? "badge-gray"}`}>
                   {stat.category}
                 </span>
               </div>
