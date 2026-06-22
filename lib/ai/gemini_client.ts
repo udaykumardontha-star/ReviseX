@@ -35,6 +35,7 @@ const JSON_GENERATION_CONFIG = {
   temperature: 0.2,       // low temperature → more deterministic JSON
   topP: 0.9,
   maxOutputTokens: 8192,
+  responseMimeType: "application/json",
 } as const;
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
@@ -52,20 +53,22 @@ import { VALID_CATEGORIES } from "@/db/schema";
  *   - Plain text only (no markdown, no bullets)
  *   - SSC exam style — concise factual justification
  */
-const QUESTION_EXTRACTOR_SYSTEM_PROMPT = `You are an SSC Exam Data Processor. Extract multiple-choice questions from the input into a valid JSON object. Follow these rules strictly:
+const QUESTION_EXTRACTOR_SYSTEM_PROMPT = `You are an SSC Exam Data Processor. Extract every complete multiple-choice question from the input into a valid JSON object. Follow these rules strictly:
 
-1. Categories MUST be exactly one of: ${VALID_CATEGORIES.join(", ")}.
-2. 'topic' must be highly specific and dynamically generated (e.g., "Mughal Architecture", "Cricket Terminology"). DO NOT just copy the category name.
-4. correct_option must be exactly "A", "B", "C", or "D".
-5. difficulty must be exactly "easy", "medium", or "hard".
-6. short_explanation is MANDATORY for every question. Rules:
+1. Preserve the exact English question and option text. Never merge separate questions or invent missing options.
+2. A question is complete only when it has a question stem and four distinct options. Skip headers, footers, page numbers, solutions, and incomplete fragments.
+3. Categories MUST be exactly one of: ${VALID_CATEGORIES.join(", ")}.
+4. 'topic' must be highly specific and dynamically generated (e.g., "Mughal Architecture", "Cricket Terminology"). DO NOT just copy the category name.
+5. correct_option must be exactly "A", "B", "C", or "D". Use a supplied answer key when present; otherwise solve the question carefully.
+6. difficulty must be exactly "easy", "medium", or "hard".
+7. short_explanation is MANDATORY for every question. Rules:
    - Maximum 1-2 sentences of plain text.
    - Explain WHY the correct option is correct using a concrete fact.
    - No markdown, no bullet points, no lengthy theory.
-7. If the input is an image: read the text visible in the image and extract MCQs from it.
-8. If the text contains both Hindi and English (e.g. bilingual exam paper), completely IGNORE the Hindi part. Extract the question and options ONLY in English.
-9. If no MCQs are found, return {"questions": []}.
-10. Return ONLY valid JSON. No markdown, no explanation, no code fences.
+8. If the input is an image: read the text visible in the image and extract MCQs from it.
+9. If the text contains both Hindi and English (e.g. bilingual exam paper), completely IGNORE the Hindi part. Extract the question and options ONLY in English.
+10. If no MCQs are found, return {"questions": []}.
+11. Return ONLY valid JSON. No markdown, no explanation, no code fences.
 
 Output format:
 {
@@ -135,8 +138,10 @@ export const geminiClient = {
       });
 
       const prompt = `Extract all MCQ questions from the following exam text. Every question MUST have a short_explanation:\n\n${pdfTextChunk}`;
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await generateTextWithRetry(async () => {
+        const result = await model.generateContent(prompt);
+        return result.response.text();
+      });
 
       if (!text || text.trim().length === 0) {
         return err("Gemini returned empty response for question extraction", null, "AI_PARSE_ERROR");
@@ -184,8 +189,10 @@ export const geminiClient = {
         text: "Read all text visible in this image. Extract all MCQ questions found. Every question MUST have a short_explanation. Return only the JSON object.",
       };
 
-      const result = await model.generateContent([textPart, imagePart]);
-      const text = result.response.text();
+      const text = await generateTextWithRetry(async () => {
+        const result = await model.generateContent([textPart, imagePart]);
+        return result.response.text();
+      });
 
       if (!text || text.trim().length === 0) {
         return err("Gemini returned empty response for image extraction", null, "AI_PARSE_ERROR");
@@ -220,8 +227,10 @@ export const geminiClient = {
       });
 
       const prompt = `Extract all MCQ questions from the following pasted content. The content may include one or more questions, study notes, or raw exam material. Extract every MCQ question found. Every question MUST have a short_explanation. Return only the JSON object:\n\n${rawText}`;
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await generateTextWithRetry(async () => {
+        const result = await model.generateContent(prompt);
+        return result.response.text();
+      });
 
       if (!text || text.trim().length === 0) {
         return err("Gemini returned empty response for text extraction", null, "AI_PARSE_ERROR");
@@ -289,4 +298,20 @@ export const geminiClient = {
     return modelId;
   },
 } as const;
+
+async function generateTextWithRetry(generate: () => Promise<string>): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await generate();
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message.toLowerCase() : String(error);
+      const retryable = /429|quota|timeout|timed out|503|502|500|network/.test(message);
+      if (!retryable || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 750 * 2 ** attempt));
+    }
+  }
+  throw lastError;
+}
 

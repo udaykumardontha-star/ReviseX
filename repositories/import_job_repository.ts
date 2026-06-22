@@ -273,7 +273,7 @@ export const importJobRepository = {
     const failedPages: number[] = JSON.parse(job.failedPagesJson) as number[];
     const percentComplete =
       job.totalPages > 0
-        ? Math.round((job.currentPage / job.totalPages) * 100)
+        ? Math.min(100, Math.round((job.currentPage / job.totalPages) * 100))
         : 0;
 
     return {

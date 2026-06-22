@@ -150,6 +150,7 @@ export const importService = {
       fileHash,
       sourceId: source.id,
       totalPages: pageCount,
+      ...(input.forcedCategory && { forcedCategory: input.forcedCategory }),
       textContent: input.textContent,
     });
 
@@ -259,6 +260,15 @@ export const importService = {
           job,
           maxQuestionsPerChunk
         );
+        if (!stageResult.validResponse) {
+          allFailedPages.push(chunk.chunkIndex);
+          await importJobRepository.updateProgress(jobId, {
+            currentPage: chunk.chunkIndex + 1,
+            failedPages: allFailedPages,
+            status: "processing",
+          });
+          continue;
+        }
         totalExtracted += stageResult.inserted;
         totalSkipped += stageResult.skipped;
 
@@ -326,6 +336,10 @@ export const importService = {
         job,
         maxQuestionsPerChunk
       );
+      if (!stageResult.validResponse) {
+        await importJobRepository.markFailed(jobId);
+        return err("AI returned an invalid question response", null, "AI_PARSE_ERROR");
+      }
       totalExtracted += stageResult.inserted;
       totalSkipped += stageResult.skipped;
 
@@ -386,6 +400,11 @@ export const importService = {
 
       if (!chunk.text.trim()) {
         allFailedPages.push(chunk.startPage);
+        await importJobRepository.updateProgress(jobId, {
+          currentPage: chunk.chunkIndex + 1,
+          failedPages: allFailedPages,
+          status: "processing",
+        });
         continue;
       }
 
@@ -407,6 +426,15 @@ export const importService = {
         job,
         maxQuestionsPerChunk
       );
+      if (!stageResult.validResponse) {
+        for (let p = chunk.startPage; p <= chunk.endPage; p++) allFailedPages.push(p);
+        await importJobRepository.updateProgress(jobId, {
+          currentPage: chunk.chunkIndex + 1,
+          failedPages: allFailedPages,
+          status: "processing",
+        });
+        continue;
+      }
       totalExtracted += stageResult.inserted;
       totalSkipped += stageResult.skipped;
 
@@ -494,12 +522,12 @@ async function stageQuestionsFromAiResponse(
   rawJson: string,
   job: ImportJob,
   maxQuestionsPerChunk: number
-): Promise<{ inserted: number; skipped: number }> {
+): Promise<{ inserted: number; skipped: number; validResponse: boolean }> {
   const parseResult = validationService.parseJson(rawJson);
-  if (!parseResult.success) return { inserted: 0, skipped: 0 };
+  if (!parseResult.success) return { inserted: 0, skipped: 0, validResponse: false };
 
   const validateResult = validationService.validateQuestionExtractorResponse(parseResult.data);
-  if (!validateResult.success) return { inserted: 0, skipped: 0 };
+  if (!validateResult.success) return { inserted: 0, skipped: 0, validResponse: false };
 
   const validQuestions = validateResult.data.slice(0, maxQuestionsPerChunk);
   const skipped = validateResult.data.length - validQuestions.length;
@@ -517,7 +545,7 @@ async function stageQuestionsFromAiResponse(
   }));
 
   const inserted = await stagedQuestionRepository.createMany(stageInputs);
-  return { inserted, skipped };
+  return { inserted, skipped, validResponse: true };
 }
 
 function estimateRemainingSeconds(totalChunks: number, completedChunks: number): number {

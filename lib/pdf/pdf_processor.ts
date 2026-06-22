@@ -53,6 +53,10 @@ export type PdfExtractionResult = {
   fileSizeBytes: number;
 };
 
+const PAGE_MARKER_PREFIX = "\n\n<<<REVISEX_PAGE:";
+const PAGE_MARKER_SUFFIX = ">>>\n";
+const MAX_CHARS_PER_AI_CHUNK = 8_000;
+
 export type PdfChunk = {
   chunkIndex: number;
   startPage: number;
@@ -99,10 +103,28 @@ export const pdfProcessor = {
 
     try {
       const parsed = await pdfParse(buffer, {
-        pagerender: (pageData: { getTextContent: () => Promise<{ items: Array<{ str: string }> }> }) => {
+        pagerender: (pageData: {
+          pageNumber?: number;
+          getTextContent: (options?: object) => Promise<{
+            items: Array<{ str: string; transform?: number[]; hasEOL?: boolean }>;
+          }>;
+        }) => {
           return pageData.getTextContent().then(
-            (textContent: { items: Array<{ str: string }> }) => {
-              return textContent.items.map((item: { str: string }) => item.str).join(" ");
+            (textContent) => {
+              let text = "";
+              let previousY: number | undefined;
+
+              for (const item of textContent.items) {
+                const y = item.transform?.[5];
+                const startsNewLine =
+                  text.length > 0 &&
+                  (item.hasEOL === true ||
+                    (y !== undefined && previousY !== undefined && y !== previousY));
+                text += `${startsNewLine ? "\n" : text ? " " : ""}${item.str}`;
+                previousY = y;
+              }
+
+              return `${PAGE_MARKER_PREFIX}${pageData.pageNumber ?? 0}${PAGE_MARKER_SUFFIX}${text}`;
             }
           );
         },
@@ -132,12 +154,17 @@ export const pdfProcessor = {
   ): PdfChunk[] {
     if (!fullText.trim() || totalPages === 0) return [];
 
-    const charsPerPage = Math.ceil(fullText.length / Math.max(totalPages, 1));
-    const MAX_CHARS_PER_CHUNK = 12000; // Cap to prevent hitting Gemini's 8192 token output limit
+    const markedPages = parseMarkedPages(fullText);
+    if (markedPages.length > 0) {
+      return chunkRealPages(markedPages, pagesPerChunk);
+    }
 
-    // If a standard chunk by pages is too large, we fall back to a safe character limit
-    const targetCharsPerChunk = Math.min(charsPerPage * pagesPerChunk, MAX_CHARS_PER_CHUNK);
-    
+    // Backward-compatible fallback for jobs cached before page markers were added.
+    const charsPerPage = Math.ceil(fullText.length / Math.max(totalPages, 1));
+    const targetCharsPerChunk = Math.max(
+      1,
+      Math.min(charsPerPage * Math.max(pagesPerChunk, 1), MAX_CHARS_PER_AI_CHUNK)
+    );
     const chunks: PdfChunk[] = [];
     let chunkIndex = 0;
     let charOffset = 0;
@@ -284,4 +311,73 @@ export const pdfProcessor = {
     return ok(true);
   },
 } as const;
+
+function parseMarkedPages(fullText: string): Array<{ pageNumber: number; text: string }> {
+  const marker = /<<<REVISEX_PAGE:(\d+)>>>\n/g;
+  const matches = [...fullText.matchAll(marker)];
+  return matches.map((match, index) => ({
+    pageNumber: Number(match[1]) || index + 1,
+    text: fullText
+      .slice((match.index ?? 0) + match[0].length, matches[index + 1]?.index ?? fullText.length)
+      .trim(),
+  }));
+}
+
+function chunkRealPages(
+  pages: Array<{ pageNumber: number; text: string }>,
+  pagesPerChunk: number
+): PdfChunk[] {
+  const chunks: PdfChunk[] = [];
+  const maxPages = Math.max(1, pagesPerChunk);
+
+  for (const page of pages) {
+    const pageParts = splitAtSafeBoundary(page.text, MAX_CHARS_PER_AI_CHUNK);
+    for (const part of pageParts) {
+      const previous = chunks[chunks.length - 1];
+      const canAppend =
+        previous &&
+        previous.endPage - previous.startPage + 1 < maxPages &&
+        previous.text.length + part.length + 2 <= MAX_CHARS_PER_AI_CHUNK;
+
+      if (canAppend) {
+        previous.text = `${previous.text}\n\n${part}`.trim();
+        previous.endPage = page.pageNumber;
+      } else if (part.trim()) {
+        chunks.push({
+          chunkIndex: chunks.length,
+          startPage: page.pageNumber,
+          endPage: page.pageNumber,
+          text: part.trim(),
+        });
+      }
+    }
+  }
+
+  return chunks;
+}
+
+function splitAtSafeBoundary(text: string, maxChars: number): string[] {
+  const parts: string[] = [];
+  let offset = 0;
+  while (offset < text.length) {
+    let end = Math.min(offset + maxChars, text.length);
+    if (end < text.length) {
+      const window = text.slice(offset, end);
+      const questionStarts = [...window.matchAll(/\n(?=\s*(?:(?:q(?:uestion)?\.?\s*)?\d{1,4}[.)]))/gi)];
+      const questionBoundary = questionStarts.at(-1)?.index;
+      const candidates = [
+        questionBoundary === undefined ? -1 : offset + questionBoundary + 1,
+        text.lastIndexOf("\n\n", end),
+        text.lastIndexOf("\n", end),
+        text.lastIndexOf(". ", end) + 1,
+      ];
+      const boundary = Math.max(...candidates);
+      if (boundary > offset + maxChars / 2) end = boundary;
+    }
+    const part = text.slice(offset, end).trim();
+    if (part) parts.push(part);
+    offset = end;
+  }
+  return parts;
+}
 

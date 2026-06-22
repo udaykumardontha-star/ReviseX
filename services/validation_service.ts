@@ -47,9 +47,7 @@ const ExtractedQuestionSchema = z.object({
  * Schema for the full Prompt 1 JSON envelope.
  */
 const QuestionExtractorResponseSchema = z.object({
-  questions: z
-    .array(ExtractedQuestionSchema)
-    .min(1, "questions array is empty"),
+  questions: z.array(z.unknown()),
 });
 
 /**
@@ -180,10 +178,18 @@ export const validationService = {
       );
     }
 
+    if (parseResult.data.questions.length === 0) return ok([]);
+
     const validated: ValidatedExtractedQuestion[] = [];
     const skipped: string[] = [];
 
-    for (const raw of parseResult.data.questions) {
+    for (const candidate of parseResult.data.questions) {
+      const questionResult = ExtractedQuestionSchema.safeParse(candidate);
+      if (!questionResult.success) {
+        skipped.push(questionResult.error.issues.map((issue) => issue.message).join(", "));
+        continue;
+      }
+      const raw = questionResult.data;
       // Normalize and enforce correct_option
       const correctOption = normalizeCorrectOption(raw.correct_option);
       if (!correctOption) {
