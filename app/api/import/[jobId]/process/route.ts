@@ -20,13 +20,15 @@ export async function POST(
 
     if (contentType.includes("application/json")) {
       const bodyText = await req.text();
-      const body = bodyText ? JSON.parse(bodyText) as { textContent?: string } : {};
+      const body = bodyText
+        ? JSON.parse(bodyText) as { textContent?: string; mimeType?: string }
+        : {};
       const textContent = body.textContent?.trim();
 
       result = await importService.processImport(
         jobId,
-        null,          // no file buffer for text imports
-        "text/plain",
+        null,
+        body.mimeType ?? "text/plain",
         textContent
       );
     } else {
@@ -56,10 +58,14 @@ export async function POST(
     if (!result.data.isCompleted && process.env.QSTASH_TOKEN) {
       const { qstashClient } = await import("@/lib/qstash");
       if (qstashClient) {
-        const url = new URL("/api/qstash/process-chunk", req.url).toString();
-        await qstashClient.publishJSON({ url, body: { jobId } });
-        console.log(`[QStash] Handoff successful for job ${jobId}. Returning to client.`);
-        return NextResponse.json({ ...result.data, isCompleted: true, background: true });
+        try {
+          const url = new URL("/api/qstash/process-chunk", req.url).toString();
+          await qstashClient.publishJSON({ url, body: { jobId } });
+          console.log(`[QStash] Handoff successful for job ${jobId}. Returning to client.`);
+          return NextResponse.json({ ...result.data, isCompleted: true, background: true });
+        } catch (error) {
+          console.error(`[QStash] Handoff failed for job ${jobId}; continuing in browser:`, error);
+        }
       }
     }
 

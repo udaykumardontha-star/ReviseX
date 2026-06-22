@@ -8,8 +8,13 @@ export async function GET() {
       return NextResponse.json({ error: result.error, code: result.code }, { status: 500 });
     }
     
-    return NextResponse.json({ facts: result.data ?? [] });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { facts: result.data ?? [] },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to load facts";
+    console.error("[Facts] Failed to load facts:", err);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

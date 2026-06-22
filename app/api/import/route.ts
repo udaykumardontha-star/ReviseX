@@ -77,7 +77,17 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const jobs = await importService.listJobs();
-  const stats = await importService.getJobStats();
-  return NextResponse.json({ jobs, stats });
+  try {
+    const [jobs, stats] = await Promise.all([
+      importService.listJobs(),
+      importService.getJobStats(),
+    ]);
+    return NextResponse.json(
+      { jobs, stats },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    console.error("[Import] Failed to load history:", error);
+    return NextResponse.json({ error: "Failed to load import history" }, { status: 500 });
+  }
 }

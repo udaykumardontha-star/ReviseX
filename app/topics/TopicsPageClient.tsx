@@ -30,6 +30,7 @@ type Props = { initialData?: ListData | null };
 export function TopicsPageClient({ initialData }: Props) {
   const [data, setData] = useState<ListData | null>(initialData ?? null);
   const [loading, setLoading] = useState(!initialData);
+  const [loadError, setLoadError] = useState("");
   const [subject, setSubject] = useState("All");
   const [section, setSection] = useState("All");
   const [status, setStatus] = useState("");
@@ -40,6 +41,7 @@ export function TopicsPageClient({ initialData }: Props) {
 
   const fetchTopics = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     const params = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
@@ -56,9 +58,15 @@ export function TopicsPageClient({ initialData }: Props) {
     if (status) params.set("status", status);
     if (q.trim()) params.set("q", q.trim());
 
-    const r = await fetch(`/api/topics?${params.toString()}`);
-    if (r.ok) setData(await r.json() as ListData);
-    setLoading(false);
+    try {
+      const r = await fetch(`/api/topics?${params.toString()}`, { cache: "no-store" });
+      if (!r.ok) throw new Error("Topics request failed");
+      setData(await r.json() as ListData);
+    } catch {
+      setLoadError("Could not load topics. Check your connection and retry.");
+    } finally {
+      setLoading(false);
+    }
   }, [subject, section, status, q, page]);
 
   useEffect(() => {
@@ -151,6 +159,12 @@ export function TopicsPageClient({ initialData }: Props) {
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="skeleton" style={{ height: 130 }} />
           ))}
+        </div>
+      ) : loadError ? (
+        <div className="empty-state">
+          <div className="empty-title">Topics unavailable</div>
+          <div className="empty-desc">{loadError}</div>
+          <button className="btn btn-secondary btn-sm" onClick={() => void fetchTopics()}>Retry</button>
         </div>
       ) : data && data.items.length === 0 ? (
         <div className="empty-state">

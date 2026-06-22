@@ -21,6 +21,7 @@ export type {
   CreateImportJobInput,
   ImportJobUpdate,
   ImportJobProgress,
+  ImportJobListItem,
 } from "./import_job_repository";
 
 export { topicRepository } from "./topic_repository";

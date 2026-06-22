@@ -89,16 +89,32 @@ export function ImportPageClient() {
 
   // ── Jobs list ─────────────────────────────────────────────────────────
   const [jobsData, setJobsData] = useState<JobsData | null>(null);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchJobs = useCallback(async () => {
-    const r = await fetch("/api/import");
-    if (r.ok) setJobsData(await r.json() as JobsData);
+    try {
+      setJobsError("");
+      const r = await fetch("/api/import", { cache: "no-store" });
+      if (!r.ok) throw new Error("Import history request failed");
+      setJobsData(await r.json() as JobsData);
+    } catch {
+      setJobsError("Could not load import history. Please retry.");
+    } finally {
+      setJobsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     void fetchJobs();
   }, [fetchJobs]);
+
+  useEffect(() => {
+    if (!jobsData?.jobs.some((job) => job.status === "processing")) return;
+    const timer = window.setInterval(() => void fetchJobs(), 5000);
+    return () => window.clearInterval(timer);
+  }, [jobsData, fetchJobs]);
 
   // ── Ctrl+V / Clipboard handler ────────────────────────────────────────
   useEffect(() => {
@@ -253,11 +269,11 @@ export function ImportPageClient() {
 
         while (!pd.isCompleted) {
           let processRes: Response;
-            if (finalMode === "text") {
+            if (finalMode === "text" || finalFile?.type === "application/pdf") {
               processRes = await fetch(`/api/import/${startData.jobId}/process`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({}),
+                body: JSON.stringify({ mimeType: finalFile?.type ?? "text/plain" }),
               });
             } else {
             const processForm = new FormData();
@@ -317,7 +333,7 @@ export function ImportPageClient() {
     }
   };
 
-  const handleResume = async (jobId: number) => {
+  const handleResume = async (jobId: number, mimeType: string) => {
     setProcessing(true);
     let pd: ProcessResult & { error?: string; code?: string; isCompleted?: boolean; background?: boolean } = { isCompleted: false, totalExtracted: 0, totalSkipped: 0 };
     setError("");
@@ -328,7 +344,7 @@ export function ImportPageClient() {
         const processRes = await fetch(`/api/import/${jobId}/process`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ mimeType }),
         });
         
         const processJson = await processRes.json() as ProcessResult & { error?: string; code?: string; isCompleted?: boolean; background?: boolean };
@@ -580,7 +596,15 @@ export function ImportPageClient() {
           <button className="btn btn-ghost btn-sm" onClick={() => void fetchJobs()}>↺ Refresh</button>
         </div>
 
-        {!jobsData || jobsData.jobs.length === 0 ? (
+        {jobsLoading ? (
+          <div className="skeleton" style={{ height: 88, marginTop: 12 }} />
+        ) : jobsError ? (
+          <div className="empty-state" style={{ padding: "28px 0" }}>
+            <div className="empty-title">Import history unavailable</div>
+            <div className="empty-desc">{jobsError}</div>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setJobsLoading(true); void fetchJobs(); }}>Retry</button>
+          </div>
+        ) : !jobsData || jobsData.jobs.length === 0 ? (
           <div className="empty-state" style={{ padding: "28px 0" }}>
             <div className="empty-icon">📭</div>
             <div className="empty-title">No imports yet</div>
@@ -627,13 +651,18 @@ export function ImportPageClient() {
                   )}
                   {(job.status === "processing" || job.status === "paused") && (
                      <div style={{ display: "flex", gap: 8 }}>
-                       {job.status === "paused" && (
+                       {(job.status === "paused" || job.status === "processing") && (
                          <button
                            className="btn btn-secondary btn-sm"
                            style={{ padding: "0 8px" }}
-                           onClick={() => handleResume(job.id)}
+                            onClick={() => handleResume(
+                              job.id,
+                              job.fileName.toLowerCase().endsWith(".pdf")
+                                ? "application/pdf"
+                                : "text/plain"
+                            )}
                            disabled={processing}
-                           title="Resume job (e.g., after daily limit resets)"
+                            title="Resume this import from its saved chunk"
                          >
                            ▶️ Resume
                          </button>

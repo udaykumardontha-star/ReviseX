@@ -207,7 +207,11 @@ export const importService = {
     const allFailedPages: number[] = JSON.parse(job.failedPagesJson) as number[];
 
     // ── Determine file type and build chunks ──────────────────────────────
-    const detectedType = fileBuffer ? detectFileType(mimeType) : "text";
+    const detectedType = mimeType === "application/pdf"
+      ? "pdf"
+      : fileBuffer
+        ? detectFileType(mimeType)
+        : "text";
 
     if (!detectedType) {
       await importJobRepository.markFailed(jobId);

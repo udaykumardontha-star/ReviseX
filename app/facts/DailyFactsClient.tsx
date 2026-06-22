@@ -11,22 +11,25 @@ type Fact = {
 export function DailyFactsClient() {
   const [facts, setFacts] = useState<Fact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const fetchFacts = async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const res = await fetch("/api/facts", { cache: "no-store" });
+      if (!res.ok) throw new Error("Facts request failed");
+      const data = await res.json() as { facts?: Fact[] };
+      setFacts(data.facts ?? []);
+    } catch {
+      setLoadError("Could not load today's facts. Please retry.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchFacts = async () => {
-      try {
-        const res = await fetch("/api/facts");
-        if (res.ok) {
-          const data = await res.json();
-          setFacts(data.facts);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFacts();
+    void fetchFacts();
   }, []);
 
   return (
@@ -43,6 +46,12 @@ export function DailyFactsClient() {
           Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="skeleton" style={{ height: 80 }} />
           ))
+        ) : loadError ? (
+          <div className="empty-state">
+            <div className="empty-title">Facts unavailable</div>
+            <div className="empty-desc">{loadError}</div>
+            <button className="btn btn-secondary btn-sm" onClick={() => void fetchFacts()}>Retry</button>
+          </div>
         ) : facts.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">💡</div>

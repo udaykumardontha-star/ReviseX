@@ -49,6 +49,8 @@ export type ImportJobProgress = {
   updatedAt: string;
 };
 
+export type ImportJobListItem = Omit<ImportJob, "textContent">;
+
 // ─── Repository ───────────────────────────────────────────────────────────────
 
 export const importJobRepository = {
@@ -119,9 +121,24 @@ export const importJobRepository = {
    * Returns all import jobs ordered by creation date descending.
    * Used by the /imports UI for the queue overview.
    */
-  async findAll(): Promise<ImportJob[]> {
+  async findAll(): Promise<ImportJobListItem[]> {
     return await db
-      .select()
+      .select({
+        id: importJobs.id,
+        fileName: importJobs.fileName,
+        fileSize: importJobs.fileSize,
+        fileHash: importJobs.fileHash,
+        sourceId: importJobs.sourceId,
+        totalPages: importJobs.totalPages,
+        currentPage: importJobs.currentPage,
+        extractedQuestions: importJobs.extractedQuestions,
+        estimatedRemainingSeconds: importJobs.estimatedRemainingSeconds,
+        failedPagesJson: importJobs.failedPagesJson,
+        forcedCategory: importJobs.forcedCategory,
+        status: importJobs.status,
+        createdAt: importJobs.createdAt,
+        updatedAt: importJobs.updatedAt,
+      })
       .from(importJobs)
       .orderBy(desc(importJobs.createdAt))
       .all();
